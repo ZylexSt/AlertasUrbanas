@@ -5,8 +5,7 @@ import androidx.car.app.Screen
 import androidx.car.app.Session
 
 class UrbanAlertsCarSession : Session() {
-
     override fun onCreateScreen(intent: Intent): Screen {
-        return AndroidAutoHomeScreen(carContext)
+        return AutomotiveMapScreen(carContext)
     }
 }

@@ -1,4 +1,8 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
+
+import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,12 +25,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
-private val ReportsBackground = Color(0xFFF6F4F0)
-private val ReportsPrimary = Color(0xFF3F6862)
-private val ReportsText = Color(0xFF202A2E)
-private val PendingColor = Color(0xFFE7A33E)
-private val ApprovedColor = Color(0xFF4F8A6D)
-private val RejectedColor = Color(0xFFD9534F)
+private val ReportsBackground = UrbanColors.Background
+private val ReportsPrimary = UrbanColors.Primary
+private val ReportsText = UrbanColors.TextPrimary
+private val PendingColor = UrbanColors.MediumUrgency
+private val ApprovedColor = UrbanColors.Success
+private val RejectedColor = UrbanColors.HighUrgency
 
 private data class UserReport(
     val title: String,
@@ -404,3 +408,7 @@ private fun MyReportsPreview() {
         MyReportsScreen()
     }
 }
+
+
+
+

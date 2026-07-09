@@ -1,4 +1,6 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -22,10 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
-private val DetailBackground = Color(0xFFF6F4F0)
-private val DetailPrimary = Color(0xFF3F6862)
-private val DetailText = Color(0xFF202A2E)
-private val DetailDanger = Color(0xFFD9534F)
+private val DetailBackground = UrbanColors.Background
+private val DetailPrimary = UrbanColors.Primary
+private val DetailText = UrbanColors.TextPrimary
+private val DetailDanger = UrbanColors.HighUrgency
 
 @Composable
 fun DetailAlertScreen(
@@ -159,7 +161,7 @@ private fun EvidenceImage() {
             .clip(RoundedCornerShape(22.dp))
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(Color(0xFF4B4B49))
+            drawRect(UrbanColors.EvidenceDark)
 
             val cracks = listOf(
                 Offset(0.05f, 0.18f) to Offset(0.42f, 0.45f),
@@ -171,7 +173,7 @@ private fun EvidenceImage() {
 
             cracks.forEach { crack ->
                 drawLine(
-                    color = Color(0xFF2D2D2C),
+                    color = UrbanColors.EvidenceLine,
                     start = Offset(
                         size.width * crack.first.x,
                         size.height * crack.first.y
@@ -186,7 +188,7 @@ private fun EvidenceImage() {
             }
 
             drawOval(
-                color = Color(0xFF232322),
+                color = UrbanColors.EvidenceStrong,
                 topLeft = Offset(
                     size.width * 0.24f,
                     size.height * 0.30f
@@ -198,7 +200,7 @@ private fun EvidenceImage() {
             )
 
             drawOval(
-                color = Color(0xFF676763),
+                color = UrbanColors.EvidenceMuted,
                 topLeft = Offset(
                     size.width * 0.31f,
                     size.height * 0.38f
@@ -400,3 +402,7 @@ private fun DetailAlertPreview() {
         DetailAlertScreen()
     }
 }
+
+
+
+

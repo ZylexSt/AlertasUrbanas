@@ -1,4 +1,8 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
+
+import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -22,15 +26,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
-import com.example.alertasurbanas.ui.screens.AIRecommendationsScreen
 
 
-private val Background = Color(0xFFF6F4F0)
-private val Primary = Color(0xFF3F6862)
-private val TextPrimary = Color(0xFF202A2E)
-private val Terracotta = Color(0xFFC8754A)
-private val HighUrgency = Color(0xFFD9534F)
-private val MediumUrgency = Color(0xFFE7A33E)
+private val Background = UrbanColors.Background
+private val Primary = UrbanColors.Primary
+private val TextPrimary = UrbanColors.TextPrimary
+private val Terracotta = UrbanColors.Terracotta
+private val HighUrgency = UrbanColors.HighUrgency
+private val MediumUrgency = UrbanColors.MediumUrgency
 
 private data class AlertCategory(
     val name: String,
@@ -143,12 +146,17 @@ fun HomeScreen( onNavigate: (String) -> Unit = {}) {
                         fontSize = 18.sp
                     )
 
-                    Text(
-                        text = "Ver todas",
-                        color = Primary,
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 13.sp
-                    )
+                    TextButton(
+                        onClick = {
+                            onNavigate("ListaAlertas")
+                        }
+                    ) {
+                        Text(
+                            text = "Ver todas",
+                            color = Primary,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
 
@@ -219,7 +227,7 @@ private fun SearchBar() {
             focusedContainerColor = Color.White,
             unfocusedContainerColor = Color.White,
             focusedBorderColor = Primary,
-            unfocusedBorderColor = Color(0xFFE4E1DC)
+            unfocusedBorderColor = UrbanColors.BorderSoft
         )
     )
 }
@@ -554,3 +562,8 @@ private fun AIHomeBanner(
         }
     }
 }
+
+
+
+
+

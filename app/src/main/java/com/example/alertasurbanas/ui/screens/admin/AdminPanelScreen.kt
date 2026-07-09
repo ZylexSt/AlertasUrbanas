@@ -1,4 +1,6 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.admin
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,12 +23,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
-private val AdminBackground = Color(0xFFF6F4F0)
-private val AdminPrimary = Color(0xFF3F6862)
-private val AdminText = Color(0xFF202A2E)
-private val AdminWarning = Color(0xFFE7A33E)
-private val AdminDanger = Color(0xFFD9534F)
-private val AdminSuccess = Color(0xFF4F8A6D)
+private val AdminBackground = UrbanColors.Background
+private val AdminPrimary = UrbanColors.Primary
+private val AdminText = UrbanColors.TextPrimary
+private val AdminWarning = UrbanColors.MediumUrgency
+private val AdminDanger = UrbanColors.HighUrgency
+private val AdminSuccess = UrbanColors.Success
 
 private data class AdminReport(
     val title: String,
@@ -40,7 +42,8 @@ private data class AdminReport(
 
 @Composable
 fun AdminPanelScreen(
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onNavigate: (String) -> Unit = {}
 ) {
     var selectedFilter by rememberSaveable {
         mutableStateOf("Pendientes")
@@ -77,7 +80,13 @@ fun AdminPanelScreen(
     )
 
     Scaffold(
-        containerColor = AdminBackground
+        containerColor = AdminBackground,
+        bottomBar = {
+            AdminBottomBar(
+                selectedItem = "Panel",
+                onItemSelected = onNavigate
+            )
+        }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -466,3 +475,9 @@ private fun AdminPanelPreview() {
         AdminPanelScreen()
     }
 }
+
+
+
+
+
+

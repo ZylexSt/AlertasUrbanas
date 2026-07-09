@@ -1,4 +1,6 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -26,11 +28,11 @@ import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 
-private val RouteBackground = Color(0xFFF6F4F0)
-private val RoutePrimary = Color(0xFF3F6862)
-private val RouteAccent = Color(0xFFC8754A)
-private val RouteText = Color(0xFF202A2E)
-private val RouteDanger = Color(0xFFD9534F)
+private val RouteBackground = UrbanColors.Background
+private val RoutePrimary = UrbanColors.Primary
+private val RouteAccent = UrbanColors.Terracotta
+private val RouteText = UrbanColors.TextPrimary
+private val RouteDanger = UrbanColors.HighUrgency
 
 @Composable
 fun PlanRouteScreen(
@@ -129,7 +131,7 @@ fun PlanRouteScreen(
                             .width(42.dp)
                             .height(4.dp)
                             .background(
-                                Color(0xFFD1CECA),
+                                UrbanColors.MapLine,
                                 CircleShape
                             )
                             .align(Alignment.CenterHorizontally)
@@ -139,7 +141,7 @@ fun PlanRouteScreen(
                         icon = Icons.Outlined.MyLocation,
                         label = "Origen",
                         value = "Mi ubicación actual",
-                        color = Color(0xFF4285F4)
+                        color = UrbanColors.CurrentLocation
                     )
 
                     RouteLocationField(
@@ -234,7 +236,7 @@ private fun RouteMap() {
     Canvas(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF0EFEB))
+            .background(UrbanColors.NeutralPanel)
     ) {
         val streetWidth = 8.dp.toPx()
 
@@ -318,7 +320,7 @@ private fun RouteMap() {
         )
 
         drawCircle(
-            color = Color(0xFF4285F4),
+            color = UrbanColors.CurrentLocation,
             radius = 8.dp.toPx(),
             center = Offset(
                 size.width * 0.15f,
@@ -460,3 +462,7 @@ private fun PlanRoutePreview() {
         PlanRouteScreen()
     }
 }
+
+
+
+

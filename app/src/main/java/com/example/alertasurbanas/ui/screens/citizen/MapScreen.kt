@@ -1,4 +1,8 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
+
+import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -22,12 +26,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
-private val MapBackground = Color(0xFFF1F0EC)
+private val MapBackground = UrbanColors.MapBackground
 private val MapStreet = Color.White
-private val MapPrimary = Color(0xFF3F6862)
-private val MapText = Color(0xFF202A2E)
-private val MapHigh = Color(0xFFD9534F)
-private val MapMedium = Color(0xFFE7A33E)
+private val MapPrimary = UrbanColors.Primary
+private val MapText = UrbanColors.TextPrimary
+private val MapHigh = UrbanColors.HighUrgency
+private val MapMedium = UrbanColors.MediumUrgency
 
 @Composable
 fun MapScreen( onNavigate: (String) -> Unit = {}) {
@@ -161,7 +165,7 @@ private fun FakeCityMap() {
         )
 
         drawCircle(
-            color = Color(0xFFDDE9DC),
+            color = UrbanColors.MapGreenAreaStrong,
             radius = 58.dp.toPx(),
             center = Offset(size.width * 0.78f, size.height * 0.70f)
         )
@@ -304,7 +308,7 @@ private fun CurrentLocation(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(15.dp)
                 .background(
-                    color = Color(0xFF4285F4),
+                    color = UrbanColors.CurrentLocation,
                     shape = CircleShape
                 )
         )
@@ -332,7 +336,7 @@ private fun SelectedAlertCard(    modifier: Modifier = Modifier,
                     .width(42.dp)
                     .height(4.dp)
                     .background(
-                        color = Color(0xFFD1CECA),
+                        color = UrbanColors.MapLine,
                         shape = CircleShape
                     )
                     .align(Alignment.CenterHorizontally)
@@ -449,3 +453,7 @@ private fun MapScreenPreview() {
         MapScreen()
     }
 }
+
+
+
+

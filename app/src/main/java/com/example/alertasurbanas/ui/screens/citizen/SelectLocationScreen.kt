@@ -1,4 +1,6 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -20,10 +22,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
-private val LocationBackground = Color(0xFFF1F0EC)
-private val LocationPrimary = Color(0xFF3F6862)
-private val LocationAccent = Color(0xFFC8754A)
-private val LocationText = Color(0xFF202A2E)
+private val LocationBackground = UrbanColors.MapBackground
+private val LocationPrimary = UrbanColors.Primary
+private val LocationAccent = UrbanColors.Terracotta
+private val LocationText = UrbanColors.TextPrimary
 
 @Composable
 fun SelectLocationScreen(
@@ -141,7 +143,7 @@ private fun LocationMapBackground() {
         )
 
         drawCircle(
-            color = Color(0xFFDCE8DA),
+            color = UrbanColors.MapGreenArea,
             radius = 62.dp.toPx(),
             center = Offset(
                 size.width * 0.20f,
@@ -276,7 +278,7 @@ private fun LocationConfirmation(
                     .width(44.dp)
                     .height(4.dp)
                     .background(
-                        color = Color(0xFFD3D0CC),
+                        color = UrbanColors.Handle,
                         shape = CircleShape
                     )
                     .align(Alignment.CenterHorizontally)
@@ -350,3 +352,8 @@ private fun SelectLocationPreview() {
         SelectLocationScreen()
     }
 }
+
+
+
+
+

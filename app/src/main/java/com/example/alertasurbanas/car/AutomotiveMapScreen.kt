@@ -3,6 +3,7 @@ package com.example.alertasurbanas.car
 import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
+import androidx.car.app.ScreenManager
 import androidx.car.app.model.Action
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
@@ -13,7 +14,7 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import com.example.alertasurbanas.BuildConfig
 
-class AndroidAutoMapScreen(
+class AutomotiveMapScreen(
     carContext: CarContext
 ) : Screen(carContext) {
 
@@ -43,21 +44,43 @@ class AndroidAutoMapScreen(
         val pane = Pane.Builder()
             .addRow(
                 Row.Builder()
-                    .setTitle("Bache peligroso")
-                    .addText("Av. Siempre Viva 742 · Urgencia alta")
+                    .setTitle("Choque en Av. Reforma")
+                    .addText("Av. Reforma 1200")
+                    .addText("Alta · 250 m")
                     .build()
             )
             .addRow(
                 Row.Builder()
-                    .setTitle("2 alertas cercanas")
-                    .addText("Conduce con precaución")
+                    .setTitle("Calle bloqueada")
+                    .addText("Eje Central Lázaro Cárdenas")
+                    .addText("Media · 600 m")
+                    .build()
+            )
+            .addAction(
+                Action.Builder()
+                    .setTitle("Ruta segura")
+                    .setOnClickListener {
+                        carContext
+                            .getCarService(ScreenManager::class.java)
+                            .push(AutomotiveRouteAlertsScreen(carContext))
+                    }
+                    .build()
+            )
+            .addAction(
+                Action.Builder()
+                    .setTitle("Ver detalle")
+                    .setOnClickListener {
+                        carContext
+                            .getCarService(ScreenManager::class.java)
+                            .push(AutomotiveAlertDetailScreen(carContext))
+                    }
                     .build()
             )
             .build()
 
         val content = PaneTemplate.Builder(pane)
             .setTitle("Mapa de alertas")
-            .setHeaderAction(Action.BACK)
+            .setHeaderAction(Action.APP_ICON)
             .build()
 
         return MapWithContentTemplate.Builder()

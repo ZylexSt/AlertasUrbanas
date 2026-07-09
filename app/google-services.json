@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "848335214605",
+    "project_id": "alertasurbanas-21964",
+    "storage_bucket": "alertasurbanas-21964.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:848335214605:android:50cb3b1b47f86a7aea5d44",
+        "android_client_info": {
+          "package_name": "com.example.alertasurbanas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAg2l-ZTNbHkfdPvMz0yTD12oaL494jfmM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

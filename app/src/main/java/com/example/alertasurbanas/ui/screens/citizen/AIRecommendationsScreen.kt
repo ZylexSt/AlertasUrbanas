@@ -1,4 +1,8 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
+
+import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -24,12 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
-private val AIBackground = Color(0xFFF6F4F0)
-private val AIPrimary = Color(0xFF3F6862)
-private val AIText = Color(0xFF202A2E)
-private val AIOrange = Color(0xFFC8754A)
-private val AIWarning = Color(0xFFE7A33E)
-private val AIDanger = Color(0xFFD9534F)
+private val AIBackground = UrbanColors.Background
+private val AIPrimary = UrbanColors.Primary
+private val AIText = UrbanColors.TextPrimary
+private val AIOrange = UrbanColors.Terracotta
+private val AIWarning = UrbanColors.MediumUrgency
+private val AIDanger = UrbanColors.HighUrgency
 
 private data class AIRecommendation(
     val title: String,
@@ -196,7 +200,7 @@ private fun AIHeroCard() {
                 brush = Brush.linearGradient(
                     listOf(
                         AIPrimary,
-                        Color(0xFF5B8B83)
+                        UrbanColors.PrimaryLight
                     )
                 ),
                 shape = RoundedCornerShape(22.dp)
@@ -251,7 +255,7 @@ private fun RiskMapCard() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
-                    .background(Color(0xFFF0EFEB))
+                    .background(UrbanColors.NeutralPanel)
             ) {
                 val street = 7.dp.toPx()
 
@@ -434,3 +438,7 @@ private fun AIRecommendationsPreview() {
         AIRecommendationsScreen()
     }
 }
+
+
+
+

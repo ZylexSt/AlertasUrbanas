@@ -1,4 +1,8 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
+
+import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -21,11 +25,11 @@ import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import androidx.compose.foundation.lazy.LazyColumn
 
-private val ReportBackground = Color(0xFFF6F4F0)
-private val ReportPrimary = Color(0xFF3F6862)
-private val ReportText = Color(0xFF202A2E)
-private val ReportMedium = Color(0xFFE7A33E)
-private val ReportHigh = Color(0xFFD9534F)
+private val ReportBackground = UrbanColors.Background
+private val ReportPrimary = UrbanColors.Primary
+private val ReportText = UrbanColors.TextPrimary
+private val ReportMedium = UrbanColors.MediumUrgency
+private val ReportHigh = UrbanColors.HighUrgency
 
 private data class ReportType(
     val name: String,
@@ -140,7 +144,7 @@ fun CreateReportScreen(
                             focusedContainerColor = Color.White,
                             unfocusedContainerColor = Color.White,
                             focusedBorderColor = ReportPrimary,
-                            unfocusedBorderColor = Color(0xFFD9D6D1)
+                            unfocusedBorderColor = UrbanColors.BorderMuted
                         )
                     )
                 }
@@ -278,7 +282,7 @@ private fun ReportTypeCard(
         border = if (selected) {
             null
         } else {
-            BorderStroke(1.dp, Color(0xFFE0DDD8))
+            BorderStroke(1.dp, UrbanColors.Border)
         }
     ) {
         Column(
@@ -313,7 +317,7 @@ private fun LocationSelector(onClick: () -> Unit) {
         colors = CardDefaults.outlinedCardColors(
             containerColor = Color.White
         ),
-        border = BorderStroke(1.dp, Color(0xFFD9D6D1))
+        border = BorderStroke(1.dp, UrbanColors.BorderMuted)
     ) {
         Row(
             modifier = Modifier.padding(15.dp),
@@ -375,7 +379,7 @@ private fun UrgencyOption(
         },
         border = BorderStroke(
             width = if (selected) 2.dp else 1.dp,
-            color = if (selected) color else Color(0xFFD9D6D1)
+            color = if (selected) color else UrbanColors.BorderMuted
         )
     ) {
         Row(
@@ -463,3 +467,7 @@ private fun CreateReportPreview() {
         CreateReportScreen()
     }
 }
+
+
+
+

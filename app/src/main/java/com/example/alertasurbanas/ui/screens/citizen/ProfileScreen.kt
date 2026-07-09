@@ -1,4 +1,8 @@
-package com.example.alertasurbanas.ui.screens
+package com.example.alertasurbanas.ui.screens.citizen
+
+import com.example.alertasurbanas.ui.theme.UrbanColors
+
+import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -20,10 +24,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
-private val ProfileBackground = Color(0xFFF6F4F0)
-private val ProfilePrimary = Color(0xFF3F6862)
-private val ProfileText = Color(0xFF202A2E)
-private val ProfileDanger = Color(0xFFD9534F)
+private val ProfileBackground = UrbanColors.Background
+private val ProfilePrimary = UrbanColors.Primary
+private val ProfileText = UrbanColors.TextPrimary
+private val ProfileDanger = UrbanColors.HighUrgency
 
 private data class ProfileOption(
     val title: String,
@@ -34,7 +38,7 @@ private data class ProfileOption(
 @Composable
 fun ProfileScreen(
     onNavigate: (String) -> Unit = {},
-    onOpenAdmin: () -> Unit = {}
+    onLogout: () -> Unit = {}
 ) {
     var notificationsEnabled by rememberSaveable {
         mutableStateOf(true)
@@ -84,19 +88,6 @@ fun ProfileScreen(
 
             item {
                 ProfileMenuCard {
-                    ProfileMenuOption(
-                        option = ProfileOption(
-                            title = "Editar perfil",
-                            subtitle = "Nombre, correo y fotografía",
-                            icon = Icons.Outlined.Person
-                        )
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 62.dp),
-                        color = ProfileText.copy(alpha = 0.08f)
-                    )
-
                     ProfileMenuOption(
                         option = ProfileOption(
                             title = "Privacidad y seguridad",
@@ -154,19 +145,6 @@ fun ProfileScreen(
 
                     ProfileMenuOption(
                         option = ProfileOption(
-                            title = "Android Auto",
-                            subtitle = "Configuración para el automóvil",
-                            icon = Icons.Outlined.DirectionsCar
-                        )
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 62.dp),
-                        color = ProfileText.copy(alpha = 0.08f)
-                    )
-
-                    ProfileMenuOption(
-                        option = ProfileOption(
                             title = "Apariencia",
                             subtitle = "Tema y visualización",
                             icon = Icons.Outlined.Palette
@@ -174,86 +152,10 @@ fun ProfileScreen(
                     )
                 }
             }
-            item {
-                SectionLabel("Administración")
-            }
-
-            item {
-                Card(
-                    onClick = onOpenAdmin,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = ProfilePrimary.copy(alpha = 0.10f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(15.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.AdminPanelSettings,
-                            contentDescription = null,
-                            tint = ProfilePrimary
-                        )
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Panel de administrador",
-                                color = ProfileText,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Text(
-                                text = "Validar y gestionar reportes",
-                                color = ProfileText.copy(alpha = 0.6f),
-                                fontSize = 11.sp
-                            )
-                        }
-
-                        Icon(
-                            imageVector = Icons.Outlined.ChevronRight,
-                            contentDescription = null,
-                            tint = ProfileText
-                        )
-                    }
-                }
-            }
-
-            item {
-                SectionLabel("Soporte")
-            }
-
-            item {
-                ProfileMenuCard {
-                    ProfileMenuOption(
-                        option = ProfileOption(
-                            title = "Ayuda y soporte",
-                            subtitle = "Preguntas frecuentes y contacto",
-                            icon = Icons.Outlined.HelpOutline
-                        )
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 62.dp),
-                        color = ProfileText.copy(alpha = 0.08f)
-                    )
-
-                    ProfileMenuOption(
-                        option = ProfileOption(
-                            title = "Acerca de la aplicación",
-                            subtitle = "Versión 1.0.0",
-                            icon = Icons.Outlined.Info
-                        )
-                    )
-                }
-            }
 
             item {
                 OutlinedButton(
-                    onClick = {},
+                    onClick = onLogout,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -500,3 +402,9 @@ private fun ProfilePreview() {
         ProfileScreen()
     }
 }
+
+
+
+
+
+
