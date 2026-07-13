@@ -39,18 +39,25 @@ private data class ReportType(
 @Composable
 fun CreateReportScreen(
     onNavigate: (String) -> Unit = {},
-    onSelectLocation: () -> Unit = {}
-
+    onSelectLocation: () -> Unit = {},
+    selectedType: String = "Bache",
+    onTypeSelected: (String) -> Unit = {},
+    selectedUrgency: String = "Media",
+    onUrgencySelected: (String) -> Unit = {},
+    description: String = "",
+    onDescriptionChange: (String) -> Unit = {},
+    locationName: String = "Av. Independencia 250, Col. Centro",
+    isLoading: Boolean = false,
+    errorMessage: String = "",
+    onSubmitReport: (
+        type: String,
+        description: String,
+        urgency: String,
+        locationName: String
+    ) -> Unit = { _, _, _, _ -> }
 ) {
-    var selectedType by rememberSaveable {
-        mutableStateOf("Bache")
-    }
 
-    var selectedUrgency by rememberSaveable {
-        mutableStateOf("Media")
-    }
-
-    var description by rememberSaveable {
+    var localError by rememberSaveable {
         mutableStateOf("")
     }
 
@@ -101,7 +108,7 @@ fun CreateReportScreen(
                                 type = type,
                                 selected = selectedType == type.name,
                                 onClick = {
-                                    selectedType = type.name
+                                    onTypeSelected(type.name)
                                 }
                             )
                         }
@@ -127,7 +134,7 @@ fun CreateReportScreen(
                         value = description,
                         onValueChange = {
                             if (it.length <= 200) {
-                                description = it
+                                onDescriptionChange(it)
                             }
                         },
                         modifier = Modifier
@@ -164,7 +171,7 @@ fun CreateReportScreen(
                             selected = selectedUrgency == "Baja",
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                selectedUrgency = "Baja"
+                                onUrgencySelected("Baja")
                             }
                         )
 
@@ -174,7 +181,7 @@ fun CreateReportScreen(
                             selected = selectedUrgency == "Media",
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                selectedUrgency = "Media"
+                                onUrgencySelected("Media")
                             }
                         )
 
@@ -184,7 +191,7 @@ fun CreateReportScreen(
                             selected = selectedUrgency == "Alta",
                             modifier = Modifier.weight(1f),
                             onClick = {
-                                selectedUrgency = "Alta"
+                                onUrgencySelected("Alta")
                             }
                         )
                     }
@@ -199,8 +206,36 @@ fun CreateReportScreen(
                 }
 
                 item {
+                    val visibleError = localError.ifBlank { errorMessage }
+
+                    if (visibleError.isNotBlank()) {
+                        Text(
+                            text = visibleError,
+                            color = ReportHigh,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                item {
                     Button(
-                        onClick = {},
+                        onClick = {
+                            localError = when {
+                                description.trim().isBlank() -> "Agrega una descripcion del reporte."
+                                else -> ""
+                            }
+
+                            if (localError.isBlank()) {
+                                onSubmitReport(
+                                    selectedType,
+                                    description.trim(),
+                                    selectedUrgency,
+                                    locationName
+                                )
+                            }
+                        },
+                        enabled = !isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(55.dp),
@@ -209,17 +244,25 @@ fun CreateReportScreen(
                             containerColor = ReportPrimary
                         )
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Send,
-                            contentDescription = null
-                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.Send,
+                                contentDescription = null
+                            )
 
-                        Spacer(modifier = Modifier.width(9.dp))
+                            Spacer(modifier = Modifier.width(9.dp))
 
-                        Text(
-                            text = "Enviar reporte",
-                            fontWeight = FontWeight.Bold
-                        )
+                            Text(
+                                text = "Enviar reporte",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

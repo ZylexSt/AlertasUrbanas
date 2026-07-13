@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
+import com.example.alertasurbanas.model.UrbanReport
+
 private val ReportsBackground = UrbanColors.Background
 private val ReportsPrimary = UrbanColors.Primary
 private val ReportsText = UrbanColors.TextPrimary
@@ -43,12 +45,16 @@ private data class UserReport(
 
 @Composable
 fun MyReportsScreen(
+    reports: List<UrbanReport> = emptyList(),
+    isLoading: Boolean = false,
+    errorMessage: String = "",
     onNavigate: (String) -> Unit = {}
 ) {
     var selectedFilter by rememberSaveable {
         mutableStateOf("Todos")
     }
 
+    /*
     val reports = listOf(
         UserReport(
             title = "Bache peligroso",
@@ -76,11 +82,13 @@ fun MyReportsScreen(
         )
     )
 
+     */
+
     val visibleReports = if (selectedFilter == "Todos") {
         reports
     } else {
         reports.filter {
-            it.status == selectedFilter
+            reportStatusLabel(it.status) == selectedFilter
         }
     }
 
@@ -151,13 +159,50 @@ fun MyReportsScreen(
                 )
             }
 
-            if (visibleReports.isEmpty()) {
-                item {
-                    EmptyReports()
+            when {
+                isLoading -> {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = ReportsPrimary)
+                        }
+                    }
                 }
-            } else {
-                items(visibleReports) { report ->
-                    UserReportCard(report)
+
+                errorMessage.isNotBlank() -> {
+                    item {
+                        Text(
+                            text = errorMessage,
+                            color = RejectedColor,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                visibleReports.isEmpty() -> {
+                    item {
+                        EmptyReports()
+                    }
+                }
+
+                else -> {
+                    items(visibleReports) { report ->
+                        UserReportCard(
+                            UserReport(
+                                title = report.type,
+                                location = report.locationName,
+                                date = "Reporte reciente",
+                                status = reportStatusLabel(report.status),
+                                statusColor = reportStatusColor(report.status),
+                                icon = reportIcon(report.type)
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -398,6 +443,35 @@ private fun EmptyReports() {
             text = "No hay reportes en esta categoría",
             color = ReportsText.copy(alpha = 0.6f)
         )
+    }
+}
+
+
+private fun reportStatusLabel(status: String): String {
+    return when (status) {
+        "pending" -> "Pendiente"
+        "approved" -> "Validado"
+        "rejected" -> "Rechazado"
+        else -> status
+    }
+}
+
+private fun reportStatusColor(status: String): Color {
+    return when (status) {
+        "pending" -> PendingColor
+        "approved" -> ApprovedColor
+        "rejected" -> RejectedColor
+        else -> PendingColor
+    }
+}
+
+private fun reportIcon(type: String): ImageVector {
+    return when (type) {
+        "Bache" -> Icons.Outlined.Construction
+        "Luminaria" -> Icons.Outlined.Lightbulb
+        "Residuos" -> Icons.Outlined.Delete
+        "Tránsito" -> Icons.Outlined.DirectionsCar
+        else -> Icons.Outlined.ReportProblem
     }
 }
 

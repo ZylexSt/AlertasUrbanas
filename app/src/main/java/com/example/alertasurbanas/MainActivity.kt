@@ -27,6 +27,9 @@ import com.example.alertasurbanas.ui.screens.auth.WelcomeScreen
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import kotlinx.coroutines.launch
 import com.example.alertasurbanas.ui.screens.admin.AdminProfileScreen
+import com.example.alertasurbanas.data.ReportRepository
+import com.example.alertasurbanas.model.UrbanReport
+import androidx.compose.runtime.LaunchedEffect
 
 
 class MainActivity : ComponentActivity() {
@@ -42,6 +45,21 @@ class MainActivity : ComponentActivity() {
 
                 val authManager = remember { AuthManager() }
                 val scope = rememberCoroutineScope()
+
+                val reportRepository = remember { ReportRepository() }
+                var reportErrorMessage by rememberSaveable { mutableStateOf("") }
+                var isReportLoading by rememberSaveable { mutableStateOf(false) }
+                var reportType by rememberSaveable { mutableStateOf("Bache") }
+                var reportUrgency by rememberSaveable { mutableStateOf("Media") }
+                var reportDescription by rememberSaveable { mutableStateOf("") }
+                var reportLocationName by rememberSaveable {
+                    mutableStateOf("Av. Independencia 250, Col. Centro")
+                }
+
+                var myReports by remember { mutableStateOf<List<UrbanReport>>(emptyList()) }
+                var myReportsError by rememberSaveable { mutableStateOf("") }
+                var isMyReportsLoading by rememberSaveable { mutableStateOf(false) }
+
                 var errorMessage by rememberSaveable { mutableStateOf("") }
                 var isAuthLoading by rememberSaveable { mutableStateOf(false) }
                 var currentUserRole by rememberSaveable { mutableStateOf("citizen") }
@@ -137,6 +155,50 @@ class MainActivity : ComponentActivity() {
                         onNavigate = { selectedScreen = it },
                         onSelectLocation = {
                             selectedScreen = "SeleccionarUbicacion"
+                        },
+                        selectedType = reportType,
+                        onTypeSelected = {
+                            reportType = it
+                        },
+                        selectedUrgency = reportUrgency,
+                        onUrgencySelected = {
+                            reportUrgency = it
+                        },
+                        description = reportDescription,
+                        onDescriptionChange = {
+                            reportDescription = it
+                        },
+                        locationName = reportLocationName,
+                        isLoading = isReportLoading,
+                        errorMessage = reportErrorMessage,
+                        onSubmitReport = { type, description, urgency, locationName ->
+                            scope.launch {
+                                try {
+                                    reportErrorMessage = ""
+                                    isReportLoading = true
+
+                                    reportRepository.createReport(
+                                        UrbanReport(
+                                            type = type,
+                                            description = description,
+                                            urgency = urgency,
+                                            locationName = locationName
+                                        )
+                                    )
+
+                                    reportType = "Bache"
+                                    reportUrgency = "Media"
+                                    reportDescription = ""
+                                    reportLocationName = "Av. Independencia 250, Col. Centro"
+
+                                    selectedScreen = "Alertas"
+                                } catch (e: Exception) {
+                                    reportErrorMessage = e.message ?: "No se pudo crear el reporte."
+                                } finally {
+                                    isReportLoading = false
+                                }
+
+                            }
                         }
                     )
 
@@ -149,11 +211,28 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
-                    "Alertas" -> MyReportsScreen(
-                        onNavigate = {
-                            selectedScreen = it
+                    "Alertas" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                myReportsError = ""
+                                isMyReportsLoading = true
+                                myReports = reportRepository.getMyReports()
+                            } catch (e: Exception) {
+                                myReportsError = e.message ?: "No se pudieron cargar tus reportes."
+                            } finally {
+                                isMyReportsLoading = false
+                            }
                         }
-                    )
+
+                        MyReportsScreen(
+                            reports = myReports,
+                            isLoading = isMyReportsLoading,
+                            errorMessage = myReportsError,
+                            onNavigate = {
+                                selectedScreen = it
+                            }
+                        )
+                    }
 
                     "PlanearRuta" -> PlanRouteScreen(
                         onBack = {
