@@ -1,4 +1,4 @@
-package com.example.alertasurbanas.ui.screens.citizen
+﻿package com.example.alertasurbanas.ui.screens.citizen
 
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
 import com.example.alertasurbanas.model.UrbanReport
+import java.util.concurrent.TimeUnit
 
 private val ReportsBackground = UrbanColors.Background
 private val ReportsPrimary = UrbanColors.Primary
@@ -48,8 +49,10 @@ fun MyReportsScreen(
     reports: List<UrbanReport> = emptyList(),
     isLoading: Boolean = false,
     errorMessage: String = "",
+    onOpenReport: (UrbanReport) -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
+
     var selectedFilter by rememberSaveable {
         mutableStateOf("Todos")
     }
@@ -118,7 +121,7 @@ fun MyReportsScreen(
             }
 
             item {
-                ReportsSummary()
+                ReportsSummary(reports = reports)
             }
 
             item {
@@ -193,14 +196,17 @@ fun MyReportsScreen(
                 else -> {
                     items(visibleReports) { report ->
                         UserReportCard(
-                            UserReport(
+                            report = UserReport(
                                 title = report.type,
                                 location = report.locationName,
-                                date = "Reporte reciente",
+                                date = formatReportDate(report.createdAt),
                                 status = reportStatusLabel(report.status),
                                 statusColor = reportStatusColor(report.status),
                                 icon = reportIcon(report.type)
-                            )
+                            ),
+                            onClick = {
+                                onOpenReport(report)
+                            }
                         )
                     }
                 }
@@ -246,31 +252,50 @@ private fun ReportsHeader() {
 }
 
 @Composable
-private fun ReportsSummary() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
+private fun ReportsSummary(reports: List<UrbanReport>) {
+    val totalCount = reports.size
+    val pendingCount = reports.count { it.status == "pending" }
+    val approvedCount = reports.count { it.status == "approved" }
+    val rejectedCount = reports.count { it.status == "rejected" }
+
+    LazyRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        SummaryCard(
-            number = "3",
-            label = "Total",
-            color = ReportsPrimary,
-            modifier = Modifier.weight(1f)
-        )
+        item {
+            SummaryCard(
+                number = totalCount.toString(),
+                label = "Total",
+                color = ReportsPrimary,
+                modifier = Modifier.width(96.dp)
+            )
+        }
 
-        SummaryCard(
-            number = "1",
-            label = "Pendiente",
-            color = PendingColor,
-            modifier = Modifier.weight(1f)
-        )
+        item {
+            SummaryCard(
+                number = pendingCount.toString(),
+                label = "Pendiente",
+                color = PendingColor,
+                modifier = Modifier.width(96.dp)
+            )
+        }
 
-        SummaryCard(
-            number = "1",
-            label = "Validado",
-            color = ApprovedColor,
-            modifier = Modifier.weight(1f)
-        )
+        item {
+            SummaryCard(
+                number = approvedCount.toString(),
+                label = "Validado",
+                color = ApprovedColor,
+                modifier = Modifier.width(96.dp)
+            )
+        }
+
+        item {
+            SummaryCard(
+                number = rejectedCount.toString(),
+                label = "Rechazado",
+                color = RejectedColor,
+                modifier = Modifier.width(96.dp)
+            )
+        }
     }
 }
 
@@ -306,14 +331,19 @@ private fun SummaryCard(
                 color = ReportsText.copy(alpha = 0.7f),
                 fontSize = 11.sp
             )
+
+
         }
     }
 }
 
 @Composable
-private fun UserReportCard(report: UserReport) {
+private fun UserReportCard(
+    report: UserReport,
+    onClick: () -> Unit = {}
+) {
     Card(
-        onClick = {},
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
@@ -452,7 +482,7 @@ private fun reportStatusLabel(status: String): String {
         "pending" -> "Pendiente"
         "approved" -> "Validado"
         "rejected" -> "Rechazado"
-        else -> status
+        else -> status.ifBlank { "Pendiente" }
     }
 }
 
@@ -475,6 +505,26 @@ private fun reportIcon(type: String): ImageVector {
     }
 }
 
+private fun formatReportDate(createdAt: Long): String {
+    val elapsedMillis = System.currentTimeMillis() - createdAt
+
+    return when {
+        elapsedMillis < TimeUnit.MINUTES.toMillis(1) -> "Hace un momento"
+        elapsedMillis < TimeUnit.HOURS.toMillis(1) -> {
+            val minutes = TimeUnit.MILLISECONDS.toMinutes(elapsedMillis)
+            "Hace $minutes min"
+        }
+        elapsedMillis < TimeUnit.DAYS.toMillis(1) -> {
+            val hours = TimeUnit.MILLISECONDS.toHours(elapsedMillis)
+            if (hours == 1L) "Hace 1 hora" else "Hace $hours horas"
+        }
+        elapsedMillis < TimeUnit.DAYS.toMillis(7) -> {
+            val days = TimeUnit.MILLISECONDS.toDays(elapsedMillis)
+            if (days == 1L) "Hace 1 día" else "Hace $days días"
+        }
+        else -> "Hace más de una semana"
+    }
+}
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun MyReportsPreview() {
@@ -482,6 +532,7 @@ private fun MyReportsPreview() {
         MyReportsScreen()
     }
 }
+
 
 
 

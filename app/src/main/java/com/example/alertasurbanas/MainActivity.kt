@@ -1,4 +1,4 @@
-package com.example.alertasurbanas
+﻿package com.example.alertasurbanas
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -32,6 +32,7 @@ import com.example.alertasurbanas.model.UrbanReport
 import androidx.compose.runtime.LaunchedEffect
 
 
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,8 +58,10 @@ class MainActivity : ComponentActivity() {
                 }
 
                 var myReports by remember { mutableStateOf<List<UrbanReport>>(emptyList()) }
+                var selectedReport by remember { mutableStateOf<UrbanReport?>(null) }
                 var myReportsError by rememberSaveable { mutableStateOf("") }
                 var isMyReportsLoading by rememberSaveable { mutableStateOf(false) }
+                var isDeleteReportLoading by rememberSaveable { mutableStateOf(false) }
 
                 var errorMessage by rememberSaveable { mutableStateOf("") }
                 var isAuthLoading by rememberSaveable { mutableStateOf(false) }
@@ -94,7 +97,7 @@ class MainActivity : ComponentActivity() {
                                         "Inicio"
                                     }
                                 } catch (e: Exception) {
-                                    errorMessage = e.message ?: "No se pudo iniciar sesión"
+                                    errorMessage = e.message ?: "No se pudo iniciar sesiÃ³n"
                                 } finally {
                                     isAuthLoading = false
                                 }
@@ -105,7 +108,7 @@ class MainActivity : ComponentActivity() {
                             selectedScreen = "Registro"
                         },
                         onForgotPassword = {
-                            // Pendiente: recuperación de contraseña
+                            // Pendiente: recuperaciÃ³n de contraseÃ±a
                         }
                     )
 
@@ -143,11 +146,35 @@ class MainActivity : ComponentActivity() {
                     )
 
                     "Detalle" -> DetailAlertScreen(
+                        report = selectedReport,
+                        canDelete = selectedReport?.id?.isNotBlank() == true,
+                        isDeleting = isDeleteReportLoading,
                         onBack = {
-                            selectedScreen = "Mapa"
+                            selectedScreen = "Alertas"
                         },
                         onSafeRoute = {
                             selectedScreen = "PlanearRuta"
+                        },
+                        onDeleteReport = {
+                            val reportToDelete = selectedReport
+
+                            if (reportToDelete?.id?.isNotBlank() == true) {
+                                scope.launch {
+                                    try {
+                                        isDeleteReportLoading = true
+                                        myReportsError = ""
+
+                                        reportRepository.deleteReport(reportToDelete.id)
+                                        myReports = myReports.filterNot { it.id == reportToDelete.id }
+                                        selectedReport = null
+                                        selectedScreen = "Alertas"
+                                    } catch (e: Exception) {
+                                        myReportsError = e.message ?: "No se pudo eliminar el reporte."
+                                    } finally {
+                                        isDeleteReportLoading = false
+                                    }
+                                }
+                            }
                         }
                     )
 
@@ -191,6 +218,7 @@ class MainActivity : ComponentActivity() {
                                     reportDescription = ""
                                     reportLocationName = "Av. Independencia 250, Col. Centro"
 
+
                                     selectedScreen = "Alertas"
                                 } catch (e: Exception) {
                                     reportErrorMessage = e.message ?: "No se pudo crear el reporte."
@@ -228,6 +256,10 @@ class MainActivity : ComponentActivity() {
                             reports = myReports,
                             isLoading = isMyReportsLoading,
                             errorMessage = myReportsError,
+                            onOpenReport = { report ->
+                                selectedReport = report
+                                selectedScreen = "Detalle"
+                            },
                             onNavigate = {
                                 selectedScreen = it
                             }
@@ -307,6 +339,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+
 
 
 

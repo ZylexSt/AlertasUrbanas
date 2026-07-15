@@ -1,8 +1,9 @@
-package com.example.alertasurbanas.ui.screens.citizen
+﻿package com.example.alertasurbanas.ui.screens.citizen
 
+import com.example.alertasurbanas.R
+import com.example.alertasurbanas.model.UrbanReport
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -11,18 +12,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
+
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import java.util.concurrent.TimeUnit
 
 private val DetailBackground = UrbanColors.Background
 private val DetailPrimary = UrbanColors.Primary
@@ -31,9 +38,21 @@ private val DetailDanger = UrbanColors.HighUrgency
 
 @Composable
 fun DetailAlertScreen(
+    report: UrbanReport? = null,
+    canDelete: Boolean = false,
+    isDeleting: Boolean = false,
     onBack: () -> Unit = {},
-    onSafeRoute: () -> Unit = {}
+    onSafeRoute: () -> Unit = {},
+    onDeleteReport: () -> Unit = {}
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    val activeReport = report ?: UrbanReport(
+        type = "Reporte",
+        description = "Selecciona un reporte para ver su detalle.",
+        urgency = "Media",
+        locationName = "Sin ubicación"
+    )
     Scaffold(
         containerColor = DetailBackground,
         bottomBar = {
@@ -80,19 +99,25 @@ fun DetailAlertScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                DetailHeader(onBack = onBack)
+                DetailHeader(
+                    canDelete = canDelete,
+                    onBack = onBack,
+                    onDeleteClick = {
+                        showDeleteDialog = true
+                    }
+                )
             }
 
             item {
-                EvidenceImage()
+                EvidenceImage(reportType = activeReport.type)
             }
 
             item {
-                AlertTitle()
+                AlertTitle(report = activeReport)
             }
 
             item {
-                AlertMetadata()
+                AlertMetadata(report = activeReport)
             }
 
             item {
@@ -102,7 +127,7 @@ fun DetailAlertScreen(
             }
 
             item {
-                DescriptionSection()
+                DescriptionSection(description = activeReport.description)
             }
 
             item {
@@ -110,10 +135,53 @@ fun DetailAlertScreen(
             }
         }
     }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDeleting) showDeleteDialog = false
+            },
+            title = {
+                Text(text = "Eliminar reporte")
+            },
+            text = {
+                Text(text = "Esta acción eliminará el reporte de forma permanente.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onDeleteReport,
+                    enabled = !isDeleting
+                ) {
+                    if (isDeleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(text = "Eliminar", color = DetailDanger)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                    },
+                    enabled = !isDeleting
+                ) {
+                    Text(text = "Cancelar")
+                }
+            }
+        )
+    }
 }
 
 @Composable
-private fun DetailHeader(onBack: () -> Unit) {
+private fun DetailHeader(
+    canDelete: Boolean,
+    onBack: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -134,12 +202,14 @@ private fun DetailHeader(onBack: () -> Unit) {
             fontWeight = FontWeight.Bold
         )
 
-        IconButton(onClick = {}) {
-            Icon(
-                imageVector = Icons.Outlined.BookmarkBorder,
-                contentDescription = "Guardar",
-                tint = DetailText
-            )
+        if (canDelete) {
+            IconButton(onClick = onDeleteClick) {
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = "Eliminar reporte",
+                    tint = DetailDanger
+                )
+            }
         }
 
         IconButton(onClick = {}) {
@@ -153,64 +223,19 @@ private fun DetailHeader(onBack: () -> Unit) {
 }
 
 @Composable
-private fun EvidenceImage() {
+private fun EvidenceImage(reportType: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(220.dp)
             .clip(RoundedCornerShape(22.dp))
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            drawRect(UrbanColors.EvidenceDark)
-
-            val cracks = listOf(
-                Offset(0.05f, 0.18f) to Offset(0.42f, 0.45f),
-                Offset(0.92f, 0.12f) to Offset(0.60f, 0.44f),
-                Offset(0.10f, 0.85f) to Offset(0.43f, 0.60f),
-                Offset(0.93f, 0.82f) to Offset(0.59f, 0.58f),
-                Offset(0.30f, 0.05f) to Offset(0.48f, 0.40f)
-            )
-
-            cracks.forEach { crack ->
-                drawLine(
-                    color = UrbanColors.EvidenceLine,
-                    start = Offset(
-                        size.width * crack.first.x,
-                        size.height * crack.first.y
-                    ),
-                    end = Offset(
-                        size.width * crack.second.x,
-                        size.height * crack.second.y
-                    ),
-                    strokeWidth = 4.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
-            }
-
-            drawOval(
-                color = UrbanColors.EvidenceStrong,
-                topLeft = Offset(
-                    size.width * 0.24f,
-                    size.height * 0.30f
-                ),
-                size = Size(
-                    size.width * 0.52f,
-                    size.height * 0.45f
-                )
-            )
-
-            drawOval(
-                color = UrbanColors.EvidenceMuted,
-                topLeft = Offset(
-                    size.width * 0.31f,
-                    size.height * 0.38f
-                ),
-                size = Size(
-                    size.width * 0.38f,
-                    size.height * 0.28f
-                )
-            )
-        }
+        Image(
+            painter = painterResource(id = reportImageForType(reportType)),
+            contentDescription = "Evidencia predeterminada del reporte",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
 
         Surface(
             modifier = Modifier
@@ -236,7 +261,7 @@ private fun EvidenceImage() {
                 Spacer(modifier = Modifier.width(6.dp))
 
                 Text(
-                    text = "Evidencia del reporte",
+                    text = "Imagen de referencia",
                     color = Color.White,
                     fontSize = 12.sp
                 )
@@ -244,23 +269,22 @@ private fun EvidenceImage() {
         }
     }
 }
-
 @Composable
-private fun AlertTitle() {
+private fun AlertTitle(report: UrbanReport) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Bache peligroso",
+                text = report.type.ifBlank { "Reporte urbano" },
                 color = DetailText,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = "Vía pública",
+                text = reportStatusLabel(report.status),
                 color = DetailPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
@@ -269,10 +293,10 @@ private fun AlertTitle() {
 
         Surface(
             shape = RoundedCornerShape(9.dp),
-            color = DetailDanger
+            color = urgencyColor(report.urgency)
         ) {
             Text(
-                text = "Urgencia alta",
+                text = "Urgencia ${report.urgency.lowercase()}",
                 modifier = Modifier.padding(
                     horizontal = 12.dp,
                     vertical = 7.dp
@@ -286,23 +310,23 @@ private fun AlertTitle() {
 }
 
 @Composable
-private fun AlertMetadata() {
+private fun AlertMetadata(report: UrbanReport) {
     Column(
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         MetadataRow(
             icon = Icons.Outlined.LocationOn,
-            text = "Av. Siempre Viva 742, Col. Centro"
+            text = report.locationName.ifBlank { "Sin ubicación" }
         )
 
         MetadataRow(
             icon = Icons.Outlined.Schedule,
-            text = "Reportado hace 15 minutos"
+            text = formatReportDate(report.createdAt)
         )
 
         MetadataRow(
-            icon = Icons.Outlined.Visibility,
-            text = "23 personas han consultado esta alerta"
+            icon = Icons.Outlined.Person,
+            text = report.userName.ifBlank { "Usuario ciudadano" }
         )
     }
 }
@@ -331,7 +355,7 @@ private fun MetadataRow(
 }
 
 @Composable
-private fun DescriptionSection() {
+private fun DescriptionSection(description: String) {
     Column {
         Text(
             text = "Descripción",
@@ -343,7 +367,7 @@ private fun DescriptionSection() {
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Bache profundo que representa riesgo para vehículos y motocicletas, especialmente durante la noche o cuando la calle se encuentra mojada.",
+            text = description.ifBlank { "Este reporte no tiene descripción." },
             color = DetailText.copy(alpha = 0.72f),
             fontSize = 14.sp,
             lineHeight = 21.sp
@@ -395,6 +419,59 @@ private fun RecommendationCard() {
     }
 }
 
+private fun formatReportDate(createdAt: Long): String {
+    val elapsedMillis = System.currentTimeMillis() - createdAt
+
+    return when {
+        elapsedMillis < TimeUnit.MINUTES.toMillis(1) -> "Reportado hace un momento"
+        elapsedMillis < TimeUnit.HOURS.toMillis(1) -> {
+            val minutes = TimeUnit.MILLISECONDS.toMinutes(elapsedMillis)
+            "Reportado hace $minutes min"
+        }
+        elapsedMillis < TimeUnit.DAYS.toMillis(1) -> {
+            val hours = TimeUnit.MILLISECONDS.toHours(elapsedMillis)
+            if (hours == 1L) "Reportado hace 1 hora" else "Reportado hace $hours horas"
+        }
+        elapsedMillis < TimeUnit.DAYS.toMillis(7) -> {
+            val days = TimeUnit.MILLISECONDS.toDays(elapsedMillis)
+            if (days == 1L) "Reportado hace 1 día" else "Reportado hace $days días"
+        }
+        else -> "Reportado hace más de una semana"
+    }
+}
+private fun reportStatusLabel(status: String): String {
+    return when (status) {
+        "pending" -> "Pendiente"
+        "approved" -> "Validado"
+        "rejected" -> "Rechazado"
+        else -> status.ifBlank { "Pendiente" }
+    }
+}
+
+private fun urgencyColor(urgency: String): Color {
+    return when (urgency) {
+        "Alta" -> UrbanColors.HighUrgency
+        "Media" -> UrbanColors.MediumUrgency
+        "Baja" -> UrbanColors.Primary
+        else -> DetailDanger
+    }
+}
+
+private fun reportImageForType(type: String): Int {
+    val normalizedType = type.lowercase()
+
+    return when {
+        normalizedType.contains("bache") -> R.drawable.report_bache
+        normalizedType.contains("luminaria") -> R.drawable.report_luminaria
+        normalizedType.contains("iluminacion") -> R.drawable.report_luminaria
+        normalizedType.contains("iluminación") -> R.drawable.report_luminaria
+        normalizedType.contains("residuo") -> R.drawable.report_residuos
+        normalizedType.contains("transito") -> R.drawable.report_transito
+        normalizedType.contains("tránsito") -> R.drawable.report_transito
+        else -> R.drawable.report_bache
+    }
+}
+
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun DetailAlertPreview() {
@@ -402,6 +479,9 @@ private fun DetailAlertPreview() {
         DetailAlertScreen()
     }
 }
+
+
+
 
 
 

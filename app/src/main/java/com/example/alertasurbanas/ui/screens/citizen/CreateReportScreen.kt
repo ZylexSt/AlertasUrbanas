@@ -1,4 +1,4 @@
-package com.example.alertasurbanas.ui.screens.citizen
+﻿package com.example.alertasurbanas.ui.screens.citizen
 
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import androidx.compose.foundation.lazy.LazyColumn
+
 
 private val ReportBackground = UrbanColors.Background
 private val ReportPrimary = UrbanColors.Primary
@@ -198,11 +199,11 @@ fun CreateReportScreen(
                 }
 
                 item {
-                    SectionTitle("Foto de evidencia (opcional)")
+                    SectionTitle("Imagen de referencia")
                 }
 
                 item {
-                    PhotoSelector()
+                    DefaultImageNotice(reportType = selectedType)
                 }
 
                 item {
@@ -457,52 +458,56 @@ private fun UrgencyOption(
 }
 
 @Composable
-private fun PhotoSelector() {
+private fun DefaultImageNotice(reportType: String) {
     OutlinedCard(
-        onClick = {},
         modifier = Modifier
             .fillMaxWidth()
-            .height(105.dp),
+            .height(92.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.outlinedCardColors(
             containerColor = Color.White
         ),
         border = BorderStroke(
             1.dp,
-            ReportText.copy(alpha = 0.35f)
+            ReportText.copy(alpha = 0.25f)
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(15.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Outlined.AddAPhoto,
-                contentDescription = null,
-                tint = ReportPrimary,
-                modifier = Modifier.size(30.dp)
-            )
+            Surface(
+                shape = RoundedCornerShape(13.dp),
+                color = ReportPrimary.copy(alpha = 0.10f)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Image,
+                    contentDescription = null,
+                    tint = ReportPrimary,
+                    modifier = Modifier.padding(11.dp)
+                )
+            }
 
-            Spacer(modifier = Modifier.height(7.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            Text(
-                text = "Agregar fotografía",
-                color = ReportText,
-                fontWeight = FontWeight.SemiBold
-            )
+            Column {
+                Text(
+                    text = "Imagen asignada automaticamente",
+                    color = ReportText,
+                    fontWeight = FontWeight.SemiBold
+                )
 
-            Text(
-                text = "Cámara o galería",
-                color = ReportText.copy(alpha = 0.6f),
-                fontSize = 11.sp
-            )
+                Text(
+                    text = "Se usara una imagen de $reportType en el detalle.",
+                    color = ReportText.copy(alpha = 0.62f),
+                    fontSize = 12.sp
+                )
+            }
         }
     }
 }
-
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun CreateReportPreview() {
@@ -510,6 +515,8 @@ private fun CreateReportPreview() {
         CreateReportScreen()
     }
 }
+
+
 
 
 
