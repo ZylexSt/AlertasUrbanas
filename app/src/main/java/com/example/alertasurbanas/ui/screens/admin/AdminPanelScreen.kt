@@ -1,7 +1,5 @@
 package com.example.alertasurbanas.ui.screens.admin
 
-import com.example.alertasurbanas.ui.theme.UrbanColors
-
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,7 +19,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.alertasurbanas.model.UrbanReport
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
+import com.example.alertasurbanas.ui.theme.UrbanColors
+import java.util.concurrent.TimeUnit
 
 private val AdminBackground = UrbanColors.Background
 private val AdminPrimary = UrbanColors.Primary
@@ -30,54 +31,27 @@ private val AdminWarning = UrbanColors.MediumUrgency
 private val AdminDanger = UrbanColors.HighUrgency
 private val AdminSuccess = UrbanColors.Success
 
-private data class AdminReport(
-    val title: String,
-    val location: String,
-    val reporter: String,
-    val time: String,
-    val urgency: String,
-    val urgencyColor: Color,
-    val icon: ImageVector
-)
-
 @Composable
 fun AdminPanelScreen(
+    reports: List<UrbanReport> = emptyList(),
+    isLoading: Boolean = false,
+    errorMessage: String = "",
     onBack: () -> Unit = {},
+    onOpenReport: (UrbanReport) -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
     var selectedFilter by rememberSaveable {
         mutableStateOf("Pendientes")
     }
 
-    val reports = listOf(
-        AdminReport(
-            title = "Bache peligroso",
-            location = "Av. Siempre Viva 742",
-            reporter = "Juan M.",
-            time = "Hace 20 min",
-            urgency = "Alta",
-            urgencyColor = AdminDanger,
-            icon = Icons.Outlined.Construction
-        ),
-        AdminReport(
-            title = "Árbol caído",
-            location = "Calle 45 Sur 210",
-            reporter = "Laura G.",
-            time = "Hace 35 min",
-            urgency = "Media",
-            urgencyColor = AdminWarning,
-            icon = Icons.Outlined.Park
-        ),
-        AdminReport(
-            title = "Luminaria apagada",
-            location = "Av. Reforma 1200",
-            reporter = "Pedro R.",
-            time = "Hace 1 h",
-            urgency = "Media",
-            urgencyColor = AdminWarning,
-            icon = Icons.Outlined.Lightbulb
-        )
-    )
+    val filteredReports = reports.filter { report ->
+        when (selectedFilter) {
+            "Pendientes" -> report.status == "pending"
+            "Validados" -> report.status == "approved"
+            "Rechazados" -> report.status == "rejected"
+            else -> true
+        }
+    }
 
     Scaffold(
         containerColor = AdminBackground,
@@ -105,12 +79,12 @@ fun AdminPanelScreen(
             }
 
             item {
-                AdminSummary()
+                AdminSummary(reports = reports)
             }
 
             item {
                 Text(
-                    text = "Gestión de reportes",
+                    text = "Gestion de reportes",
                     color = AdminText,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -163,15 +137,47 @@ fun AdminPanelScreen(
                     )
 
                     Text(
-                        text = "${reports.size} reportes",
+                        text = "${filteredReports.size} reportes",
                         color = AdminText.copy(alpha = 0.6f),
                         fontSize = 12.sp
                     )
                 }
             }
 
-            items(reports) { report ->
-                AdminReportCard(report)
+            if (isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = AdminPrimary)
+                    }
+                }
+            } else if (errorMessage.isNotBlank()) {
+                item {
+                    Text(
+                        text = errorMessage,
+                        color = AdminDanger,
+                        fontSize = 13.sp
+                    )
+                }
+            } else if (filteredReports.isEmpty()) {
+                item {
+                    Text(
+                        text = "No hay reportes en esta categoria.",
+                        color = AdminText.copy(alpha = 0.62f),
+                        fontSize = 13.sp
+                    )
+                }
+            } else {
+                items(filteredReports, key = { it.id }) { report ->
+                    AdminReportCard(
+                        report = report,
+                        onOpenReport = { onOpenReport(report) }
+                    )
+                }
             }
         }
     }
@@ -200,7 +206,7 @@ private fun AdminHeader(onBack: () -> Unit) {
             )
 
             Text(
-                text = "Validación y gestión de incidentes.",
+                text = "Validacion y gestion de incidentes.",
                 color = AdminText.copy(alpha = 0.62f),
                 fontSize = 12.sp
             )
@@ -238,27 +244,27 @@ private fun AdminHeader(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AdminSummary() {
+private fun AdminSummary(reports: List<UrbanReport>) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         AdminSummaryCard(
-            number = "12",
+            number = reports.count { it.status == "pending" }.toString(),
             label = "Pendientes",
             color = AdminWarning,
             modifier = Modifier.weight(1f)
         )
 
         AdminSummaryCard(
-            number = "48",
+            number = reports.count { it.status == "approved" }.toString(),
             label = "Validados",
             color = AdminSuccess,
             modifier = Modifier.weight(1f)
         )
 
         AdminSummaryCard(
-            number = "5",
+            number = reports.count { it.status == "rejected" }.toString(),
             label = "Rechazados",
             color = AdminDanger,
             modifier = Modifier.weight(1f)
@@ -305,9 +311,13 @@ private fun AdminSummaryCard(
 
 @Composable
 private fun AdminReportCard(
-    report: AdminReport
+    report: UrbanReport,
+    onOpenReport: () -> Unit
 ) {
+    val urgencyColor = urgencyColor(report.urgency)
+
     Card(
+        onClick = onOpenReport,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(19.dp),
         colors = CardDefaults.cardColors(
@@ -326,13 +336,13 @@ private fun AdminReportCard(
                 Surface(
                     modifier = Modifier.size(70.dp),
                     shape = RoundedCornerShape(14.dp),
-                    color = report.urgencyColor.copy(alpha = 0.12f)
+                    color = urgencyColor.copy(alpha = 0.12f)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = report.icon,
+                            imageVector = reportIcon(report.type),
                             contentDescription = null,
-                            tint = report.urgencyColor,
+                            tint = urgencyColor,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -343,7 +353,7 @@ private fun AdminReportCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = report.title,
+                            text = report.type.ifBlank { "Reporte urbano" },
                             modifier = Modifier.weight(1f),
                             color = AdminText,
                             fontWeight = FontWeight.Bold,
@@ -353,10 +363,10 @@ private fun AdminReportCard(
 
                         Surface(
                             shape = RoundedCornerShape(7.dp),
-                            color = report.urgencyColor
+                            color = urgencyColor
                         ) {
                             Text(
-                                text = report.urgency,
+                                text = report.urgency.ifBlank { "Media" },
                                 modifier = Modifier.padding(
                                     horizontal = 8.dp,
                                     vertical = 4.dp
@@ -370,73 +380,30 @@ private fun AdminReportCard(
 
                     AdminInformation(
                         icon = Icons.Outlined.LocationOn,
-                        text = report.location
+                        text = report.locationName.ifBlank { "Sin ubicacion" }
                     )
 
                     AdminInformation(
                         icon = Icons.Outlined.Person,
-                        text = "Por ${report.reporter}"
+                        text = "Por ${report.userName.ifBlank { "Usuario ciudadano" }}"
                     )
 
                     AdminInformation(
                         icon = Icons.Outlined.Schedule,
-                        text = report.time
+                        text = formatReportDate(report.createdAt)
+                    )
+
+                    AdminInformation(
+                        icon = Icons.Outlined.Info,
+                        text = reportStatusLabel(report.status)
                     )
                 }
-            }
 
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                color = AdminText.copy(alpha = 0.08f)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(
-                    onClick = {},
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(11.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AdminSuccess
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(5.dp))
-
-                    Text("Validar")
-                }
-
-                OutlinedButton(
-                    onClick = {},
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(11.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = null,
-                        modifier = Modifier.size(17.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(5.dp))
-
-                    Text("Editar")
-                }
-
-                IconButton(onClick = {}) {
-                    Icon(
-                        imageVector = Icons.Outlined.Delete,
-                        contentDescription = "Eliminar",
-                        tint = AdminDanger
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Outlined.ChevronRight,
+                    contentDescription = "Ver detalle",
+                    tint = AdminPrimary
+                )
             }
         }
     }
@@ -463,8 +430,54 @@ private fun AdminInformation(
         Text(
             text = text,
             color = AdminText.copy(alpha = 0.63f),
-            fontSize = 11.sp
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+private fun reportIcon(type: String): ImageVector {
+    val normalizedType = type.lowercase()
+
+    return when {
+        normalizedType.contains("luminaria") ||
+                normalizedType.contains("iluminacion") ||
+                normalizedType.contains("iluminación") -> Icons.Outlined.Lightbulb
+        normalizedType.contains("residuo") -> Icons.Outlined.Delete
+        normalizedType.contains("transito") ||
+                normalizedType.contains("tránsito") -> Icons.Outlined.DirectionsCar
+        else -> Icons.Outlined.Construction
+    }
+}
+
+private fun urgencyColor(urgency: String): Color {
+    return when (urgency) {
+        "Alta" -> AdminDanger
+        "Media" -> AdminWarning
+        "Baja" -> AdminPrimary
+        else -> AdminWarning
+    }
+}
+
+private fun reportStatusLabel(status: String): String {
+    return when (status) {
+        "pending" -> "Pendiente"
+        "approved" -> "Validado"
+        "rejected" -> "Rechazado"
+        else -> status.ifBlank { "Pendiente" }
+    }
+}
+
+private fun formatReportDate(createdAt: Long): String {
+    val elapsedMillis = System.currentTimeMillis() - createdAt
+
+    return when {
+        elapsedMillis < TimeUnit.MINUTES.toMillis(1) -> "Hace un momento"
+        elapsedMillis < TimeUnit.HOURS.toMillis(1) -> "Hace ${TimeUnit.MILLISECONDS.toMinutes(elapsedMillis)} min"
+        elapsedMillis < TimeUnit.DAYS.toMillis(1) -> "Hace ${TimeUnit.MILLISECONDS.toHours(elapsedMillis)} h"
+        elapsedMillis < TimeUnit.DAYS.toMillis(7) -> "Hace ${TimeUnit.MILLISECONDS.toDays(elapsedMillis)} dias"
+        else -> "Hace mas de una semana"
     }
 }
 
@@ -475,9 +488,3 @@ private fun AdminPanelPreview() {
         AdminPanelScreen()
     }
 }
-
-
-
-
-
-

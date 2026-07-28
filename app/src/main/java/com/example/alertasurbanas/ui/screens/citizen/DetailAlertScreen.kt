@@ -39,11 +39,17 @@ private val DetailDanger = UrbanColors.HighUrgency
 @Composable
 fun DetailAlertScreen(
     report: UrbanReport? = null,
+    canEdit: Boolean = false,
     canDelete: Boolean = false,
+    canReview: Boolean = false,
     isDeleting: Boolean = false,
+    isReviewing: Boolean = false,
     onBack: () -> Unit = {},
     onSafeRoute: () -> Unit = {},
-    onDeleteReport: () -> Unit = {}
+    onEditReport: () -> Unit = {},
+    onDeleteReport: () -> Unit = {},
+    onApproveReport: () -> Unit = {},
+    onRejectReport: () -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -100,8 +106,10 @@ fun DetailAlertScreen(
         ) {
             item {
                 DetailHeader(
+                    canEdit = canEdit,
                     canDelete = canDelete,
                     onBack = onBack,
+                    onEditClick = onEditReport,
                     onDeleteClick = {
                         showDeleteDialog = true
                     }
@@ -132,6 +140,16 @@ fun DetailAlertScreen(
 
             item {
                 RecommendationCard()
+            }
+
+            if (canReview) {
+                item {
+                    AdminReviewActions(
+                        isReviewing = isReviewing,
+                        onApproveReport = onApproveReport,
+                        onRejectReport = onRejectReport
+                    )
+                }
             }
         }
     }
@@ -178,8 +196,10 @@ fun DetailAlertScreen(
 
 @Composable
 private fun DetailHeader(
+    canEdit: Boolean,
     canDelete: Boolean,
     onBack: () -> Unit,
+    onEditClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
     Row(
@@ -201,6 +221,16 @@ private fun DetailHeader(
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold
         )
+
+        if (canEdit) {
+            IconButton(onClick = onEditClick) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = "Editar reporte",
+                    tint = DetailText
+                )
+            }
+        }
 
         if (canDelete) {
             IconButton(onClick = onDeleteClick) {
@@ -414,6 +444,77 @@ private fun RecommendationCard() {
                     color = DetailText.copy(alpha = 0.72f),
                     fontSize = 13.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminReviewActions(
+    isReviewing: Boolean,
+    onApproveReport: () -> Unit,
+    onRejectReport: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(17.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(15.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Revision de administrador",
+                color = DetailText,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onRejectReport,
+                    enabled = !isReviewing,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = DetailDanger
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Text("Rechazar")
+                }
+
+                Button(
+                    onClick = onApproveReport,
+                    enabled = !isReviewing,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = UrbanColors.Success
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Text("Validar")
+                }
             }
         }
     }

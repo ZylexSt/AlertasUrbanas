@@ -48,6 +48,9 @@ fun CreateReportScreen(
     description: String = "",
     onDescriptionChange: (String) -> Unit = {},
     locationName: String = "Av. Independencia 250, Col. Centro",
+    screenTitle: String = "Crear reporte",
+    screenSubtitle: String = "Ayúdanos a mantener informada a la comunidad.",
+    submitButtonText: String = "Enviar reporte",
     isLoading: Boolean = false,
     errorMessage: String = "",
     onSubmitReport: (
@@ -84,7 +87,10 @@ fun CreateReportScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            ReportHeader()
+            ReportHeader(
+                title = screenTitle,
+                subtitle = screenSubtitle
+            )
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -260,7 +266,7 @@ fun CreateReportScreen(
                             Spacer(modifier = Modifier.width(9.dp))
 
                             Text(
-                                text = "Enviar reporte",
+                                text = submitButtonText,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -272,7 +278,10 @@ fun CreateReportScreen(
 }
 
 @Composable
-private fun ReportHeader() {
+private fun ReportHeader(
+    title: String,
+    subtitle: String
+) {
     Column(
         modifier = Modifier.padding(
             start = 20.dp,
@@ -282,14 +291,14 @@ private fun ReportHeader() {
         )
     ) {
         Text(
-            text = "Crear reporte",
+            text = title,
             color = ReportText,
             fontSize = 25.sp,
             fontWeight = FontWeight.Bold
         )
 
         Text(
-            text = "Ayúdanos a mantener informada a la comunidad.",
+            text = subtitle,
             color = ReportText.copy(alpha = 0.65f),
             fontSize = 13.sp
         )
@@ -515,6 +524,7 @@ private fun CreateReportPreview() {
         CreateReportScreen()
     }
 }
+
 
 
 

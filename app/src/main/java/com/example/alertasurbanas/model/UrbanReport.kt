@@ -1,7 +1,9 @@
 package com.example.alertasurbanas.model
+import com.google.firebase.firestore.Exclude
+
 
 data class UrbanReport(
-    val id: String = "",
+    @get:Exclude val id: String = "",
     val type: String = "",
     val description: String = "",
     val urgency: String = "",

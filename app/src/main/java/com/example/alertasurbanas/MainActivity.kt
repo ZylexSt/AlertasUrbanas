@@ -61,7 +61,15 @@ class MainActivity : ComponentActivity() {
                 var selectedReport by remember { mutableStateOf<UrbanReport?>(null) }
                 var myReportsError by rememberSaveable { mutableStateOf("") }
                 var isMyReportsLoading by rememberSaveable { mutableStateOf(false) }
+
+                var allReports by remember { mutableStateOf<List<UrbanReport>>(emptyList()) }
+                var adminReportsError by rememberSaveable { mutableStateOf("") }
+                var isAdminReportsLoading by rememberSaveable { mutableStateOf(false) }
+                var isReviewReportLoading by rememberSaveable { mutableStateOf(false) }
+
                 var isDeleteReportLoading by rememberSaveable { mutableStateOf(false) }
+                var editingReportId by rememberSaveable { mutableStateOf("") }
+                var locationReturnScreen by rememberSaveable { mutableStateOf("Reportar") }
 
                 var errorMessage by rememberSaveable { mutableStateOf("") }
                 var isAuthLoading by rememberSaveable { mutableStateOf(false) }
@@ -147,6 +155,7 @@ class MainActivity : ComponentActivity() {
 
                     "Detalle" -> DetailAlertScreen(
                         report = selectedReport,
+                        canEdit = selectedReport?.status == "pending",
                         canDelete = selectedReport?.id?.isNotBlank() == true,
                         isDeleting = isDeleteReportLoading,
                         onBack = {
@@ -154,6 +163,20 @@ class MainActivity : ComponentActivity() {
                         },
                         onSafeRoute = {
                             selectedScreen = "PlanearRuta"
+                        },
+                        onEditReport = {
+                            val reportToEdit = selectedReport
+
+                            if (reportToEdit?.id?.isNotBlank() == true && reportToEdit.status == "pending") {
+                                editingReportId = reportToEdit.id
+                                reportType = reportToEdit.type
+                                reportUrgency = reportToEdit.urgency
+                                reportDescription = reportToEdit.description
+                                reportLocationName = reportToEdit.locationName
+                                reportErrorMessage = ""
+
+                                selectedScreen = "EditarReporte"
+                            }
                         },
                         onDeleteReport = {
                             val reportToDelete = selectedReport
@@ -178,9 +201,93 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
+                    "DetalleAdmin" -> DetailAlertScreen(
+                        report = selectedReport,
+                        canEdit = false,
+                        canDelete = false,
+                        canReview = selectedReport?.status == "pending",
+                        isDeleting = false,
+                        isReviewing = isReviewReportLoading,
+                        onBack = {
+                            selectedScreen = "ListaAlertas"
+                        },
+                        onSafeRoute = {
+                            selectedScreen = "PlanearRuta"
+                        },
+                        onApproveReport = {
+                            val reportToReview = selectedReport
+
+                            if (reportToReview?.id?.isNotBlank() == true) {
+                                scope.launch {
+                                    try {
+                                        isReviewReportLoading = true
+                                        adminReportsError = ""
+
+                                        reportRepository.updateReportStatus(
+                                            reportId = reportToReview.id,
+                                            status = "approved"
+                                        )
+
+                                        val updatedReport = reportToReview.copy(status = "approved")
+                                        selectedReport = updatedReport
+                                        allReports = allReports.map { report ->
+                                            if (report.id == updatedReport.id) updatedReport else report
+                                        }
+                                    } catch (e: Exception) {
+                                        adminReportsError = e.message ?: "No se pudo validar el reporte."
+                                    } finally {
+                                        isReviewReportLoading = false
+                                    }
+                                }
+                            }
+                        },
+                        onRejectReport = {
+                            val reportToReview = selectedReport
+
+                            if (reportToReview?.id?.isNotBlank() == true) {
+                                scope.launch {
+                                    try {
+                                        isReviewReportLoading = true
+                                        adminReportsError = ""
+
+                                        reportRepository.updateReportStatus(
+                                            reportId = reportToReview.id,
+                                            status = "rejected"
+                                        )
+
+                                        val updatedReport = reportToReview.copy(status = "rejected")
+                                        selectedReport = updatedReport
+                                        allReports = allReports.map { report ->
+                                            if (report.id == updatedReport.id) updatedReport else report
+                                        }
+                                    } catch (e: Exception) {
+                                        adminReportsError = e.message ?: "No se pudo rechazar el reporte."
+                                    } finally {
+                                        isReviewReportLoading = false
+                                    }
+                                }
+                            }
+                        }
+                    )
+
+                    "DetallePublico" -> DetailAlertScreen(
+                        report = selectedReport,
+                        canEdit = false,
+                        canDelete = false,
+                        canReview = false,
+                        isDeleting = false,
+                        onBack = {
+                            selectedScreen = "Inicio"
+                        },
+                        onSafeRoute = {
+                            selectedScreen = "PlanearRuta"
+                        }
+                    )
+
                     "Reportar" -> CreateReportScreen(
                         onNavigate = { selectedScreen = it },
                         onSelectLocation = {
+                            locationReturnScreen = "Reportar"
                             selectedScreen = "SeleccionarUbicacion"
                         },
                         selectedType = reportType,
@@ -230,12 +337,84 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
+                    "EditarReporte" -> CreateReportScreen(
+                        onNavigate = { selectedScreen = it },
+                        onSelectLocation = {
+                            locationReturnScreen = "EditarReporte"
+                            selectedScreen = "SeleccionarUbicacion"
+                        },
+                        selectedType = reportType,
+                        onTypeSelected = {
+                            reportType = it
+                        },
+                        selectedUrgency = reportUrgency,
+                        onUrgencySelected = {
+                            reportUrgency = it
+                        },
+                        description = reportDescription,
+                        onDescriptionChange = {
+                            reportDescription = it
+                        },
+                        locationName = reportLocationName,
+                        screenTitle = "Editar reporte",
+                        screenSubtitle = "Actualiza la información mientras el reporte está pendiente.",
+                        submitButtonText = "Guardar cambios",
+                        isLoading = isReportLoading,
+                        errorMessage = reportErrorMessage,
+                        onSubmitReport = { type, description, urgency, locationName ->
+                            scope.launch {
+                                try {
+                                    reportErrorMessage = ""
+                                    isReportLoading = true
+
+                                    reportRepository.updateReport(
+                                        reportId = editingReportId,
+                                        type = type,
+                                        description = description,
+                                        urgency = urgency,
+                                        locationName = locationName
+                                    )
+
+                                    val updatedReport = selectedReport?.copy(
+                                        type = type,
+                                        description = description,
+                                        urgency = urgency,
+                                        locationName = locationName
+                                    )
+
+                                    if (updatedReport != null) {
+                                        selectedReport = updatedReport
+                                        myReports = myReports.map { report ->
+                                            if (report.id == updatedReport.id) {
+                                                updatedReport
+                                            } else {
+                                                report
+                                            }
+                                        }
+                                    }
+
+                                    editingReportId = ""
+                                    reportType = "Bache"
+                                    reportUrgency = "Media"
+                                    reportDescription = ""
+                                    reportLocationName = "Av. Independencia 250, Col. Centro"
+
+                                    selectedScreen = "Detalle"
+                                } catch (e: Exception) {
+                                    reportErrorMessage = e.message ?: "No se pudo actualizar el reporte."
+                                } finally {
+                                    isReportLoading = false
+                                }
+                            }
+                        }
+                    )
+
                     "SeleccionarUbicacion" -> SelectLocationScreen(
                         onBack = {
-                            selectedScreen = "Reportar"
+                            selectedScreen = locationReturnScreen
                         },
                         onConfirm = {
-                            selectedScreen = "Reportar"
+                            selectedScreen = locationReturnScreen
                         }
                     )
 
@@ -310,35 +489,97 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    "Administrador" -> AdminPanelScreen(
-                        onBack = {
-                            selectedScreen = "Perfil"
-                        },
-                        onNavigate = {
-                            selectedScreen = it
+                    "Administrador" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                adminReportsError = ""
+                                isAdminReportsLoading = true
+                                allReports = reportRepository.getAllReports()
+                            } catch (e: Exception) {
+                                adminReportsError = e.message ?: "No se pudieron cargar los reportes."
+                            } finally {
+                                isAdminReportsLoading = false
+                            }
                         }
-                    )
 
-                    "ListaAlertas" -> AlertsListScreen(
-                        onBack = {
-                            selectedScreen = "Inicio"
-                        },
-                        onOpenDetail = {
-                            selectedScreen = "Detalle"
-                        },
-                        onNavigate = {
-                            selectedScreen = it
+                        AdminPanelScreen(
+                            reports = allReports,
+                            isLoading = isAdminReportsLoading,
+                            errorMessage = adminReportsError,
+                            onBack = {
+                                selectedScreen = "Perfil"
+                            },
+                            onOpenReport = { report ->
+                                selectedReport = report
+                                selectedScreen = "DetalleAdmin"
+                            },
+                            onNavigate = {
+                                selectedScreen = it
+                            }
+                        )
+                    }
+
+                    "ListaAlertas" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                adminReportsError = ""
+                                isAdminReportsLoading = true
+                                allReports = reportRepository.getAllReports()
+                            } catch (e: Exception) {
+                                adminReportsError = e.message ?: "No se pudieron cargar los reportes."
+                            } finally {
+                                isAdminReportsLoading = false
+                            }
                         }
-                    )
 
-                    else -> HomeScreen(
-                        onNavigate = { selectedScreen = it }
-                    )
+                        AlertsListScreen(
+                            reports = allReports,
+                            isLoading = isAdminReportsLoading,
+                            errorMessage = adminReportsError,
+                            onBack = {
+                                selectedScreen = "Administrador"
+                            },
+                            onOpenDetail = { report ->
+                                selectedReport = report
+                                selectedScreen = "DetalleAdmin"
+                            },
+                            onNavigate = {
+                                selectedScreen = it
+                            }
+                        )
+                    }
+
+                    else -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                adminReportsError = ""
+                                isAdminReportsLoading = true
+                                allReports = reportRepository.getAllReports()
+                            } catch (e: Exception) {
+                                adminReportsError = e.message ?: "No se pudieron cargar los reportes."
+                            } finally {
+                                isAdminReportsLoading = false
+                            }
+                        }
+
+                        HomeScreen(
+                            reports = allReports.filter { it.status == "approved" },
+                            isLoading = isAdminReportsLoading,
+                            errorMessage = adminReportsError,
+                            onOpenReport = { report ->
+                                selectedReport = report
+                                selectedScreen = "DetallePublico"
+                            },
+                            onNavigate = { selectedScreen = it }
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+
 
 
 

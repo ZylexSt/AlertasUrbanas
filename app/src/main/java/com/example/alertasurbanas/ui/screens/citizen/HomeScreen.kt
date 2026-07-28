@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
+import com.example.alertasurbanas.model.UrbanReport
+import java.util.concurrent.TimeUnit
+
 
 private val Background = UrbanColors.Background
 private val Primary = UrbanColors.Primary
@@ -40,18 +43,15 @@ private data class AlertCategory(
     val icon: ImageVector
 )
 
-private data class UrbanAlert(
-    val title: String,
-    val location: String,
-    val distance: String,
-    val time: String,
-    val urgency: String,
-    val icon: ImageVector,
-    val color: Color
-)
 
 @Composable
-fun HomeScreen( onNavigate: (String) -> Unit = {}) {
+fun HomeScreen(
+    reports: List<UrbanReport> = emptyList(),
+    isLoading: Boolean = false,
+    errorMessage: String = "",
+    onOpenReport: (UrbanReport) -> Unit = {},
+    onNavigate: (String) -> Unit = {}
+) {
     val categories = listOf(
         AlertCategory("Todas", Icons.Outlined.GridView),
         AlertCategory("Tránsito", Icons.Outlined.DirectionsCar),
@@ -60,26 +60,7 @@ fun HomeScreen( onNavigate: (String) -> Unit = {}) {
         AlertCategory("Seguridad", Icons.Outlined.Shield)
     )
 
-    val alerts = listOf(
-        UrbanAlert(
-            title = "Bache peligroso",
-            location = "Av. Siempre Viva 742",
-            distance = "A 120 m",
-            time = "Hace 15 min",
-            urgency = "Alta",
-            icon = Icons.Outlined.Construction,
-            color = HighUrgency
-        ),
-        UrbanAlert(
-            title = "Luminaria apagada",
-            location = "Calle 26 Norte 115",
-            distance = "A 350 m",
-            time = "Hace 1 h",
-            urgency = "Media",
-            icon = Icons.Outlined.Lightbulb,
-            color = MediumUrgency
-        )
-    )
+    val nearbyReports = reports.take(2)
 
     Scaffold(
         containerColor = Background,
@@ -148,7 +129,7 @@ fun HomeScreen( onNavigate: (String) -> Unit = {}) {
 
                     TextButton(
                         onClick = {
-                            onNavigate("ListaAlertas")
+                            onNavigate("Alertas")
                         }
                     ) {
                         Text(
@@ -160,8 +141,40 @@ fun HomeScreen( onNavigate: (String) -> Unit = {}) {
                 }
             }
 
-            items(alerts) { alert ->
-                AlertCard(alert)
+            if (isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Primary)
+                    }
+                }
+            } else if (errorMessage.isNotBlank()) {
+                item {
+                    Text(
+                        text = errorMessage,
+                        color = HighUrgency,
+                        fontSize = 13.sp
+                    )
+                }
+            } else if (nearbyReports.isEmpty()) {
+                item {
+                    Text(
+                        text = "Aun no hay alertas validadas cerca de ti.",
+                        color = TextPrimary.copy(alpha = 0.65f),
+                        fontSize = 13.sp
+                    )
+                }
+            } else {
+                items(nearbyReports, key = { it.id }) { report ->
+                    AlertCard(
+                        report = report,
+                        onClick = { onOpenReport(report) }
+                    )
+                }
             }
         }
     }
@@ -315,8 +328,15 @@ private fun CategoryCard(
 }
 
 @Composable
-private fun AlertCard(alert: UrbanAlert) {
+private fun AlertCard(
+    report: UrbanReport,
+    onClick: () -> Unit
+) {
+    val color = urgencyColor(report.urgency)
+    val icon = reportIcon(report.type)
+
     Card(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -330,15 +350,15 @@ private fun AlertCard(alert: UrbanAlert) {
                 modifier = Modifier
                     .size(88.dp)
                     .background(
-                        color = alert.color.copy(alpha = 0.12f),
+                        color = color.copy(alpha = 0.12f),
                         shape = RoundedCornerShape(14.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = alert.icon,
+                    imageVector = icon,
                     contentDescription = null,
-                    tint = alert.color,
+                    tint = color,
                     modifier = Modifier.size(38.dp)
                 )
             }
@@ -348,7 +368,7 @@ private fun AlertCard(alert: UrbanAlert) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = alert.title,
+                        text = report.type.ifBlank { "Reporte urbano" },
                         modifier = Modifier.weight(1f),
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold,
@@ -358,10 +378,10 @@ private fun AlertCard(alert: UrbanAlert) {
 
                     Surface(
                         shape = RoundedCornerShape(7.dp),
-                        color = alert.color
+                        color = color
                     ) {
                         Text(
-                            text = alert.urgency,
+                            text = report.urgency.ifBlank { "Media" },
                             modifier = Modifier.padding(
                                 horizontal = 9.dp,
                                 vertical = 4.dp
@@ -375,17 +395,17 @@ private fun AlertCard(alert: UrbanAlert) {
 
                 AlertInformation(
                     icon = Icons.Outlined.LocationOn,
-                    text = alert.location
+                    text = report.locationName.ifBlank { "Sin ubicacion" }
                 )
 
                 AlertInformation(
                     icon = Icons.Outlined.NearMe,
-                    text = alert.distance
+                    text = "Ubicacion reportada"
                 )
 
                 AlertInformation(
                     icon = Icons.Outlined.Schedule,
-                    text = alert.time
+                    text = formatReportDate(report.createdAt)
                 )
             }
 
@@ -507,6 +527,42 @@ private fun navigationColors() = NavigationBarItemDefaults.colors(
     unselectedIconColor = TextPrimary.copy(alpha = 0.65f),
     unselectedTextColor = TextPrimary.copy(alpha = 0.65f)
 )
+
+
+private fun reportIcon(type: String): ImageVector {
+    val normalizedType = type.lowercase()
+
+    return when {
+        normalizedType.contains("luminaria") ||
+                normalizedType.contains("iluminacion") ||
+                normalizedType.contains("iluminación") -> Icons.Outlined.Lightbulb
+        normalizedType.contains("residuo") -> Icons.Outlined.Delete
+        normalizedType.contains("transito") ||
+                normalizedType.contains("tránsito") -> Icons.Outlined.DirectionsCar
+        else -> Icons.Outlined.Construction
+    }
+}
+
+private fun urgencyColor(urgency: String): Color {
+    return when (urgency) {
+        "Alta" -> HighUrgency
+        "Media" -> MediumUrgency
+        "Baja" -> Primary
+        else -> MediumUrgency
+    }
+}
+
+private fun formatReportDate(createdAt: Long): String {
+    val elapsedMillis = System.currentTimeMillis() - createdAt
+
+    return when {
+        elapsedMillis < TimeUnit.MINUTES.toMillis(1) -> "Hace un momento"
+        elapsedMillis < TimeUnit.HOURS.toMillis(1) -> "Hace ${TimeUnit.MILLISECONDS.toMinutes(elapsedMillis)} min"
+        elapsedMillis < TimeUnit.DAYS.toMillis(1) -> "Hace ${TimeUnit.MILLISECONDS.toHours(elapsedMillis)} h"
+        elapsedMillis < TimeUnit.DAYS.toMillis(7) -> "Hace ${TimeUnit.MILLISECONDS.toDays(elapsedMillis)} dias"
+        else -> "Hace mas de una semana"
+    }
+}
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable

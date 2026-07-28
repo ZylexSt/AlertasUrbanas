@@ -1,7 +1,4 @@
-package com.example.alertasurbanas.ui.screens.admin
-
-import com.example.alertasurbanas.ui.theme.UrbanColors
-
+﻿package com.example.alertasurbanas.ui.screens.admin
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -14,11 +11,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Construction
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.alertasurbanas.model.UrbanReport
+import com.example.alertasurbanas.ui.theme.UrbanColors
+import java.util.concurrent.TimeUnit
 
 private val AlertsBackground = UrbanColors.Background
 private val AlertsPrimary = UrbanColors.Primary
@@ -39,86 +39,26 @@ private val AlertsHigh = UrbanColors.HighUrgency
 private val AlertsMedium = UrbanColors.MediumUrgency
 private val AlertsLow = UrbanColors.LowUrgency
 
-private data class PublicAlert(
-    val title: String,
-    val category: String,
-    val location: String,
-    val distance: String,
-    val time: String,
-    val urgency: String,
-    val icon: ImageVector,
-    val color: Color
-)
-
 @Composable
 fun AlertsListScreen(
+    reports: List<UrbanReport> = emptyList(),
+    isLoading: Boolean = false,
+    errorMessage: String = "",
     onBack: () -> Unit = {},
-    onOpenDetail: () -> Unit = {},
+    onOpenDetail: (UrbanReport) -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
     var selectedFilter by remember { mutableStateOf("Todas") }
     var search by remember { mutableStateOf("") }
 
-    val alerts = listOf(
-        PublicAlert(
-            title = "Bache peligroso",
-            category = "Vía pública",
-            location = "Av. Siempre Viva 742",
-            distance = "A 120 m",
-            time = "Hace 15 min",
-            urgency = "Alta",
-            icon = Icons.Outlined.Construction,
-            color = AlertsHigh
-        ),
-        PublicAlert(
-            title = "Calle bloqueada",
-            category = "Tránsito",
-            location = "Av. Reforma 1200",
-            distance = "A 280 m",
-            time = "Hace 25 min",
-            urgency = "Alta",
-            icon = Icons.Outlined.WarningAmber,
-            color = AlertsHigh
-        ),
-        PublicAlert(
-            title = "Luminaria apagada",
-            category = "Iluminación",
-            location = "Calle 26 Norte 115",
-            distance = "A 350 m",
-            time = "Hace 1 h",
-            urgency = "Media",
-            icon = Icons.Outlined.Lightbulb,
-            color = AlertsMedium
-        ),
-        PublicAlert(
-            title = "Vehículo obstruyendo",
-            category = "Tránsito",
-            location = "Blvd. Independencia 250",
-            distance = "A 600 m",
-            time = "Hace 2 h",
-            urgency = "Baja",
-            icon = Icons.Outlined.DirectionsCar,
-            color = AlertsLow
-        ),
-        PublicAlert(
-            title = "Zona con poca vigilancia",
-            category = "Seguridad",
-            location = "Parque Central",
-            distance = "A 900 m",
-            time = "Hoy, 8:20 a. m.",
-            urgency = "Media",
-            icon = Icons.Outlined.Shield,
-            color = AlertsMedium
-        )
-    )
-
-    val filteredAlerts = alerts.filter { alert ->
-        val matchesFilter = selectedFilter == "Todas" || alert.urgency == selectedFilter
+    val filteredAlerts = reports.filter { report ->
+        val matchesFilter = selectedFilter == "Todas" || report.urgency == selectedFilter
         val matchesSearch =
             search.isBlank() ||
-                    alert.title.contains(search, ignoreCase = true) ||
-                    alert.location.contains(search, ignoreCase = true) ||
-                    alert.category.contains(search, ignoreCase = true)
+                    report.type.contains(search, ignoreCase = true) ||
+                    report.locationName.contains(search, ignoreCase = true) ||
+                    report.description.contains(search, ignoreCase = true) ||
+                    report.userName.contains(search, ignoreCase = true)
 
         matchesFilter && matchesSearch
     }
@@ -236,11 +176,40 @@ fun AlertsListScreen(
                 }
             }
 
-            items(filteredAlerts) { alert ->
-                PublicAlertCard(
-                    alert = alert,
-                    onClick = onOpenDetail
-                )
+            if (isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = AlertsPrimary)
+                    }
+                }
+            } else if (errorMessage.isNotBlank()) {
+                item {
+                    Text(
+                        text = errorMessage,
+                        color = AlertsHigh,
+                        fontSize = 13.sp
+                    )
+                }
+            } else if (filteredAlerts.isEmpty()) {
+                item {
+                    Text(
+                        text = "No hay reportes para mostrar.",
+                        color = AlertsTextSecondary,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                items(filteredAlerts, key = { it.id }) { report ->
+                    PublicAlertCard(
+                        report = report,
+                        onClick = { onOpenDetail(report) }
+                    )
+                }
             }
         }
     }
@@ -274,9 +243,11 @@ private fun FilterChip(
 
 @Composable
 private fun PublicAlertCard(
-    alert: PublicAlert,
+    report: UrbanReport,
     onClick: () -> Unit
 ) {
+    val color = urgencyColor(report.urgency)
+
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -294,15 +265,15 @@ private fun PublicAlertCard(
                 modifier = Modifier
                     .size(74.dp)
                     .background(
-                        color = alert.color.copy(alpha = 0.13f),
+                        color = color.copy(alpha = 0.13f),
                         shape = RoundedCornerShape(20.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = alert.icon,
+                    imageVector = reportIcon(report.type),
                     contentDescription = null,
-                    tint = alert.color,
+                    tint = color,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -316,7 +287,7 @@ private fun PublicAlertCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = alert.title,
+                        text = report.type.ifBlank { "Reporte urbano" },
                         color = AlertsTextPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -328,14 +299,14 @@ private fun PublicAlertCard(
                     Box(
                         modifier = Modifier
                             .background(
-                                color = alert.color.copy(alpha = 0.14f),
+                                color = color.copy(alpha = 0.14f),
                                 shape = RoundedCornerShape(12.dp)
                             )
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = alert.urgency,
-                            color = alert.color,
+                            text = report.urgency.ifBlank { "Media" },
+                            color = color,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -345,7 +316,7 @@ private fun PublicAlertCard(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = alert.category,
+                    text = reportStatusLabel(report.status),
                     color = AlertsPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold
@@ -362,7 +333,7 @@ private fun PublicAlertCard(
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = alert.location,
+                        text = report.locationName.ifBlank { "Sin ubicacion" },
                         color = AlertsTextSecondary,
                         fontSize = 13.sp,
                         maxLines = 1,
@@ -373,9 +344,11 @@ private fun PublicAlertCard(
                 Spacer(modifier = Modifier.height(5.dp))
 
                 Text(
-                    text = "${alert.distance} · ${alert.time}",
+                    text = "${report.userName.ifBlank { "Usuario ciudadano" }} - ${formatReportDate(report.createdAt)}",
                     color = AlertsTextSecondary,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -390,9 +363,42 @@ private fun PublicAlertCard(
     }
 }
 
+private fun reportIcon(type: String): ImageVector {
+    val normalizedType = type.lowercase()
+    return when {
+        normalizedType.contains("luminaria") || normalizedType.contains("iluminacion") || normalizedType.contains("iluminación") -> Icons.Outlined.Lightbulb
+        normalizedType.contains("residuo") -> Icons.Outlined.Delete
+        normalizedType.contains("transito") || normalizedType.contains("tránsito") -> Icons.Outlined.DirectionsCar
+        else -> Icons.Outlined.Construction
+    }
+}
 
+private fun urgencyColor(urgency: String): Color {
+    return when (urgency) {
+        "Alta" -> AlertsHigh
+        "Media" -> AlertsMedium
+        "Baja" -> AlertsLow
+        else -> AlertsMedium
+    }
+}
 
+private fun reportStatusLabel(status: String): String {
+    return when (status) {
+        "pending" -> "Pendiente"
+        "approved" -> "Validado"
+        "rejected" -> "Rechazado"
+        else -> status.ifBlank { "Pendiente" }
+    }
+}
 
+private fun formatReportDate(createdAt: Long): String {
+    val elapsedMillis = System.currentTimeMillis() - createdAt
 
-
-
+    return when {
+        elapsedMillis < TimeUnit.MINUTES.toMillis(1) -> "Hace un momento"
+        elapsedMillis < TimeUnit.HOURS.toMillis(1) -> "Hace ${TimeUnit.MILLISECONDS.toMinutes(elapsedMillis)} min"
+        elapsedMillis < TimeUnit.DAYS.toMillis(1) -> "Hace ${TimeUnit.MILLISECONDS.toHours(elapsedMillis)} h"
+        elapsedMillis < TimeUnit.DAYS.toMillis(7) -> "Hace ${TimeUnit.MILLISECONDS.toDays(elapsedMillis)} dias"
+        else -> "Hace mas de una semana"
+    }
+}

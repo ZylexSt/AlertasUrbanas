@@ -1,4 +1,4 @@
-package com.example.alertasurbanas.data
+﻿package com.example.alertasurbanas.data
 
 import com.example.alertasurbanas.model.UrbanReport
 import com.google.firebase.auth.FirebaseAuth
@@ -25,7 +25,6 @@ class ReportRepository {
         val document = reportsCollection.add(reportToSave).await()
         return document.id
     }
-
     suspend fun getAllReports(): List<UrbanReport> {
         return reportsCollection
             .orderBy("createdAt", Query.Direction.DESCENDING)
@@ -52,6 +51,28 @@ class ReportRepository {
             }
     }
 
+
+
+    suspend fun updateReport(
+        reportId: String,
+        type: String,
+        description: String,
+        urgency: String,
+        locationName: String
+    ) {
+        reportsCollection
+            .document(reportId)
+            .update(
+                mapOf(
+                    "type" to type,
+                    "description" to description,
+                    "urgency" to urgency,
+                    "locationName" to locationName
+                )
+            )
+            .await()
+    }
+
     suspend fun updateReportStatus(
         reportId: String,
         status: String
@@ -69,3 +90,6 @@ class ReportRepository {
             .await()
     }
 }
+
+
+
