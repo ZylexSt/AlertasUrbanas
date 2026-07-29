@@ -1,4 +1,4 @@
-﻿package com.example.alertasurbanas
+package com.example.alertasurbanas
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -28,6 +28,7 @@ import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import kotlinx.coroutines.launch
 import com.example.alertasurbanas.ui.screens.admin.AdminProfileScreen
 import com.example.alertasurbanas.data.ReportRepository
+import com.example.alertasurbanas.data.UrbanAlert
 import com.example.alertasurbanas.model.UrbanReport
 import androidx.compose.runtime.LaunchedEffect
 
@@ -70,6 +71,7 @@ class MainActivity : ComponentActivity() {
                 var isDeleteReportLoading by rememberSaveable { mutableStateOf(false) }
                 var editingReportId by rememberSaveable { mutableStateOf("") }
                 var locationReturnScreen by rememberSaveable { mutableStateOf("Reportar") }
+                var publicDetailBackScreen by rememberSaveable { mutableStateOf("Inicio") }
 
                 var errorMessage by rememberSaveable { mutableStateOf("") }
                 var isAuthLoading by rememberSaveable { mutableStateOf(false) }
@@ -150,7 +152,12 @@ class MainActivity : ComponentActivity() {
                     )
 
                     "Mapa" -> MapScreen(
-                        onNavigate = { selectedScreen = it }
+                        onNavigate = { selectedScreen = it },
+                        onOpenAlert = { alert ->
+                            selectedReport = alert.toUrbanReport()
+                            publicDetailBackScreen = "Mapa"
+                            selectedScreen = "DetallePublico"
+                        }
                     )
 
                     "Detalle" -> DetailAlertScreen(
@@ -277,7 +284,7 @@ class MainActivity : ComponentActivity() {
                         canReview = false,
                         isDeleting = false,
                         onBack = {
-                            selectedScreen = "Inicio"
+                            selectedScreen = publicDetailBackScreen
                         },
                         onSafeRoute = {
                             selectedScreen = "PlanearRuta"
@@ -410,10 +417,12 @@ class MainActivity : ComponentActivity() {
                     )
 
                     "SeleccionarUbicacion" -> SelectLocationScreen(
+                        initialAddress = reportLocationName,
                         onBack = {
                             selectedScreen = locationReturnScreen
                         },
-                        onConfirm = {
+                        onConfirm = { selectedAddress ->
+                            reportLocationName = selectedAddress
                             selectedScreen = locationReturnScreen
                         }
                     )
@@ -578,10 +587,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-
-
-
+private fun UrbanAlert.toUrbanReport(): UrbanReport {
+    return UrbanReport(
+        id = id,
+        type = title,
+        description = description,
+        urgency = urgency,
+        locationName = address,
+        latitude = latitude,
+        longitude = longitude,
+        status = "approved",
+        userName = "Reporte ciudadano",
+        createdAt = System.currentTimeMillis()
+    )
+}
 
 
 

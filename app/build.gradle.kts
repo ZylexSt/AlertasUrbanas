@@ -46,6 +46,11 @@ android {
             "ORS_API_KEY",
             "\"${localProperty("ORS_API_KEY")}\""
         )
+        buildConfigField(
+            "String",
+            "GEOAPIFY_API_KEY",
+            "\"${localProperty("GEOAPIFY_API_KEY")}\""
+        )
     }
 
     buildTypes {
@@ -78,8 +83,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation("androidx.car.app:app:1.7.0")
-    implementation("androidx.car.app:app-automotive:1.7.0")
+    implementation("org.maplibre.gl:android-sdk:13.0.2")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -97,3 +102,4 @@ dependencies {
     // Nuevo
     implementation("androidx.compose.material:material-icons-extended")
 }
+
