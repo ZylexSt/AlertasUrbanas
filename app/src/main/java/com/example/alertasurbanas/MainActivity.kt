@@ -57,6 +57,8 @@ class MainActivity : ComponentActivity() {
                 var reportLocationName by rememberSaveable {
                     mutableStateOf("Av. Independencia 250, Col. Centro")
                 }
+                var reportLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
+                var reportLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
 
                 var myReports by remember { mutableStateOf<List<UrbanReport>>(emptyList()) }
                 var selectedReport by remember { mutableStateOf<UrbanReport?>(null) }
@@ -151,14 +153,29 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
-                    "Mapa" -> MapScreen(
-                        onNavigate = { selectedScreen = it },
-                        onOpenAlert = { alert ->
+                    "Mapa" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                adminReportsError = ""
+                                isAdminReportsLoading = true
+                                allReports = reportRepository.getAllReports()
+                            } catch (e: Exception) {
+                                adminReportsError = e.message ?: "No se pudieron cargar los reportes."
+                            } finally {
+                                isAdminReportsLoading = false
+                            }
+                        }
+
+                        MapScreen(
+                            alerts = allReports.toMapAlerts(),
+                            onNavigate = { selectedScreen = it },
+                            onOpenAlert = { alert ->
                             selectedReport = alert.toUrbanReport()
                             publicDetailBackScreen = "Mapa"
-                            selectedScreen = "DetallePublico"
-                        }
-                    )
+                                selectedScreen = "DetallePublico"
+                            }
+                        )
+                    }
 
                     "Detalle" -> DetailAlertScreen(
                         report = selectedReport,
@@ -180,6 +197,8 @@ class MainActivity : ComponentActivity() {
                                 reportUrgency = reportToEdit.urgency
                                 reportDescription = reportToEdit.description
                                 reportLocationName = reportToEdit.locationName
+                                reportLatitude = reportToEdit.latitude
+                                reportLongitude = reportToEdit.longitude
                                 reportErrorMessage = ""
 
                                 selectedScreen = "EditarReporte"
@@ -323,7 +342,9 @@ class MainActivity : ComponentActivity() {
                                             type = type,
                                             description = description,
                                             urgency = urgency,
-                                            locationName = locationName
+                                            locationName = locationName,
+                                            latitude = reportLatitude,
+                                            longitude = reportLongitude
                                         )
                                     )
 
@@ -331,7 +352,8 @@ class MainActivity : ComponentActivity() {
                                     reportUrgency = "Media"
                                     reportDescription = ""
                                     reportLocationName = "Av. Independencia 250, Col. Centro"
-
+                                    reportLatitude = null
+                                    reportLongitude = null
 
                                     selectedScreen = "Alertas"
                                 } catch (e: Exception) {
@@ -379,14 +401,18 @@ class MainActivity : ComponentActivity() {
                                         type = type,
                                         description = description,
                                         urgency = urgency,
-                                        locationName = locationName
+                                        locationName = locationName,
+                                        latitude = reportLatitude,
+                                        longitude = reportLongitude
                                     )
 
                                     val updatedReport = selectedReport?.copy(
                                         type = type,
                                         description = description,
                                         urgency = urgency,
-                                        locationName = locationName
+                                        locationName = locationName,
+                                        latitude = reportLatitude,
+                                        longitude = reportLongitude
                                     )
 
                                     if (updatedReport != null) {
@@ -405,6 +431,8 @@ class MainActivity : ComponentActivity() {
                                     reportUrgency = "Media"
                                     reportDescription = ""
                                     reportLocationName = "Av. Independencia 250, Col. Centro"
+                                    reportLatitude = null
+                                    reportLongitude = null
 
                                     selectedScreen = "Detalle"
                                 } catch (e: Exception) {
@@ -421,8 +449,10 @@ class MainActivity : ComponentActivity() {
                         onBack = {
                             selectedScreen = locationReturnScreen
                         },
-                        onConfirm = { selectedAddress ->
+                        onConfirm = { selectedAddress, selectedCoordinate ->
                             reportLocationName = selectedAddress
+                            reportLatitude = selectedCoordinate.latitude
+                            reportLongitude = selectedCoordinate.longitude
                             selectedScreen = locationReturnScreen
                         }
                     )
@@ -587,6 +617,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+private fun List<UrbanReport>.toMapAlerts(): List<UrbanAlert> {
+    return filter { report ->
+        report.status == "approved" && report.latitude != null && report.longitude != null
+    }.map { report ->
+        UrbanAlert(
+            id = report.id,
+            title = report.type.ifBlank { "Reporte urbano" },
+            category = report.type.ifBlank { "Reporte" },
+            address = report.locationName.ifBlank { "Sin ubicación" },
+            description = report.description,
+            urgency = report.urgency.ifBlank { "Media" },
+            distanceText = "Ubicación reportada",
+            timeText = "Reporte validado",
+            latitude = report.latitude ?: 0.0,
+            longitude = report.longitude ?: 0.0
+        )
+    }
+}
+
 private fun UrbanAlert.toUrbanReport(): UrbanReport {
     return UrbanReport(
         id = id,

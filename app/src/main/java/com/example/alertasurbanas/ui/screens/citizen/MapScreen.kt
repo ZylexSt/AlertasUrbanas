@@ -113,6 +113,7 @@ private val MapLow = UrbanColors.Primary
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
+    alerts: List<UrbanAlert> = emptyList(),
     onNavigate: (String) -> Unit = {},
     onOpenAlert: (UrbanAlert) -> Unit = {}
 ) {
@@ -143,7 +144,7 @@ fun MapScreen(
     var routeOriginCoordinate by remember { mutableStateOf<LatLng?>(null) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val allAlerts = remember { AlertRepository.publicAlerts }
+    val allAlerts = if (alerts.isNotEmpty()) alerts else AlertRepository.publicAlerts
     val filteredAlerts = allAlerts.filter { alert ->
         (selectedCategory == "Todas" || alert.category == selectedCategory) &&
             (selectedUrgency == "Todas" || alert.urgency == selectedUrgency)

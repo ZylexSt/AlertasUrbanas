@@ -89,7 +89,7 @@ private val LocationText = UrbanColors.TextPrimary
 fun SelectLocationScreen(
     initialAddress: String = "Av. Independencia 250, Col. Centro",
     onBack: () -> Unit = {},
-    onConfirm: (String) -> Unit = {}
+    onConfirm: (String, LatLng) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -275,7 +275,7 @@ fun SelectLocationScreen(
                 onRouteClick = {
                     calculateRoute(selectedPlace?.coordinate ?: selectedCenter)
                 },
-                onConfirm = { onConfirm(selectedAddress) }
+                onConfirm = { onConfirm(selectedAddress, selectedCenter) }
             )
         }
     ) { innerPadding ->

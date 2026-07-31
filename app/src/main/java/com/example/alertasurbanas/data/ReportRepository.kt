@@ -1,4 +1,4 @@
-﻿package com.example.alertasurbanas.data
+package com.example.alertasurbanas.data
 
 import com.example.alertasurbanas.model.UrbanReport
 import com.google.firebase.auth.FirebaseAuth
@@ -58,7 +58,9 @@ class ReportRepository {
         type: String,
         description: String,
         urgency: String,
-        locationName: String
+        locationName: String,
+        latitude: Double?,
+        longitude: Double?
     ) {
         reportsCollection
             .document(reportId)
@@ -67,7 +69,9 @@ class ReportRepository {
                     "type" to type,
                     "description" to description,
                     "urgency" to urgency,
-                    "locationName" to locationName
+                    "locationName" to locationName,
+                    "latitude" to latitude,
+                    "longitude" to longitude
                 )
             )
             .await()
