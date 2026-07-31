@@ -39,6 +39,9 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.ReportProblem
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Shield
@@ -79,6 +82,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.alertasurbanas.data.AlertRepository
+import com.example.alertasurbanas.data.MapDefaults
+import com.example.alertasurbanas.data.MapRouteResult
+import com.example.alertasurbanas.data.MapRouteService
 import com.example.alertasurbanas.data.MapSearchResult
 import com.example.alertasurbanas.data.MapSearchService
 import com.example.alertasurbanas.data.UrbanAlert
@@ -91,6 +97,11 @@ import com.google.android.gms.location.Priority
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 private val MapBackground = UrbanColors.MapBackground
 private val MapPrimary = UrbanColors.Primary
@@ -111,12 +122,25 @@ fun MapScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var searchSuggestions by remember { mutableStateOf<List<MapSearchResult>>(emptyList()) }
+    var isSearchActive by remember { mutableStateOf(false) }
     var selectedCategory by remember { mutableStateOf("Todas") }
     var selectedUrgency by remember { mutableStateOf("Todas") }
     var selectedAlert by remember { mutableStateOf<UrbanAlert?>(null) }
+    var selectedPlace by remember { mutableStateOf<MapSearchResult?>(null) }
+    var showSelectedPlaceCard by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
-    var mapCenter by remember { mutableStateOf(LatLng(31.761, -106.485)) }
+    var mapCenter by remember { mutableStateOf(MapDefaults.UtcjLocation) }
     var mapZoom by remember { mutableStateOf(13.0) }
+    var currentLocation by remember { mutableStateOf<LatLng?>(MapDefaults.UtcjLocation) }
+    var routePoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
+    var routeResult by remember { mutableStateOf<MapRouteResult?>(null) }
+    var routeResults by remember { mutableStateOf<List<MapRouteResult>>(emptyList()) }
+    var selectedRouteIndex by remember { mutableStateOf(0) }
+    var isRouteLoading by remember { mutableStateOf(false) }
+    var routeOriginQuery by remember { mutableStateOf("Mi ubicación actual") }
+    var routeOriginSuggestions by remember { mutableStateOf<List<MapSearchResult>>(emptyList()) }
+    var isRouteOriginSearchActive by remember { mutableStateOf(false) }
+    var routeOriginCoordinate by remember { mutableStateOf<LatLng?>(null) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val allAlerts = remember { AlertRepository.publicAlerts }
@@ -128,9 +152,16 @@ fun MapScreen(
     fun moveToSearchResult(result: MapSearchResult) {
         searchQuery = result.title
         searchSuggestions = emptyList()
+        isSearchActive = false
         mapCenter = result.coordinate
-        mapZoom = 15.0
+        mapZoom = 16.5
         selectedAlert = null
+        selectedPlace = result
+        showSelectedPlaceCard = true
+        routePoints = emptyList()
+        routeResult = null
+        routeResults = emptyList()
+        selectedRouteIndex = 0
     }
 
     fun centerOnDeviceLocation() {
@@ -138,9 +169,19 @@ fun MapScreen(
             fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
                 .addOnSuccessListener { location ->
                     if (location != null) {
-                        mapCenter = LatLng(location.latitude, location.longitude)
-                        mapZoom = 15.0
+                        val coordinate = LatLng(location.latitude, location.longitude)
+                        currentLocation = coordinate
+                        routeOriginCoordinate = coordinate
+                        routeOriginQuery = "Mi ubicación actual"
+                        mapCenter = coordinate
+                        mapZoom = 16.0
                         selectedAlert = null
+                        selectedPlace = null
+                        showSelectedPlaceCard = false
+                        routePoints = emptyList()
+                        routeResult = null
+                        routeResults = emptyList()
+                        selectedRouteIndex = 0
                     } else {
                         Toast.makeText(
                             context,
@@ -200,14 +241,75 @@ fun MapScreen(
         }
     }
 
-    LaunchedEffect(searchQuery) {
-        if (searchQuery.length < 2) {
+    fun calculateRoute(destination: LatLng) {
+        val origin = routeOriginCoordinate ?: currentLocation ?: MapDefaults.UtcjLocation
+
+        scope.launch {
+            isRouteLoading = true
+            val results = MapRouteService.drivingRoutes(origin, destination, targetCount = 3)
+                .map { route ->
+                    route.withNearbyReports(countReportsNearRoute(route.points, filteredAlerts))
+                }
+                .sortedWith(compareBy<MapRouteResult> { it.nearbyReports }.thenBy { it.durationMinutes })
+            isRouteLoading = false
+
+            if (results.isNotEmpty()) {
+                routeResults = results
+                selectedRouteIndex = 0
+                routeResult = results.first()
+                routePoints = results.first().points
+                mapCenter = destination
+                mapZoom = 14.5
+                Toast.makeText(context, "Se encontraron ${results.size} ruta(s).", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(
+                    context,
+                    "No se pudo calcular la ruta. Revisa tu ORS_API_KEY o internet.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    LaunchedEffect(searchQuery, isSearchActive, currentLocation) {
+        if (!isSearchActive || searchQuery.length < 2) {
             searchSuggestions = emptyList()
             return@LaunchedEffect
         }
 
         delay(350)
-        searchSuggestions = MapSearchService.searchResults(searchQuery, limit = 5, proximity = mapCenter)
+        searchSuggestions = MapSearchService.searchResults(
+            query = searchQuery,
+            limit = 5,
+            proximity = currentLocation ?: MapDefaults.UtcjLocation,
+            radiusMeters = 12_000
+        )
+    }
+
+    LaunchedEffect(routeOriginQuery, isRouteOriginSearchActive, currentLocation) {
+        if (!isRouteOriginSearchActive || routeOriginQuery.length < 2) {
+            routeOriginSuggestions = emptyList()
+            return@LaunchedEffect
+        }
+
+        delay(350)
+        routeOriginSuggestions = MapSearchService.searchResults(
+            query = routeOriginQuery,
+            limit = 4,
+            proximity = currentLocation ?: MapDefaults.UtcjLocation,
+            radiusMeters = 20_000
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        val hasFinePermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasFinePermission) {
+            centerOnDeviceLocation()
+        }
     }
 
     LaunchedEffect(filteredAlerts, selectedAlert) {
@@ -235,8 +337,18 @@ fun MapScreen(
                 center = mapCenter,
                 zoom = mapZoom,
                 alerts = filteredAlerts,
+                currentLocation = currentLocation,
+                routePoints = routePoints,
+                routeLines = routeResults.map { it.points },
+                selectedRouteIndex = selectedRouteIndex,
                 onAlertSelected = { alert ->
                     selectedAlert = alert
+                    selectedPlace = null
+                    showSelectedPlaceCard = false
+                    routePoints = emptyList()
+                    routeResult = null
+                    routeResults = emptyList()
+                    selectedRouteIndex = 0
                     mapCenter = LatLng(alert.latitude, alert.longitude)
                     mapZoom = 15.0
                 }
@@ -244,7 +356,11 @@ fun MapScreen(
 
             MapSearchPanel(
                 searchQuery = searchQuery,
-                onSearchQueryChange = { searchQuery = it },
+                isSearchActive = isSearchActive,
+                onSearchQueryChange = {
+                    searchQuery = it
+                    isSearchActive = true
+                },
                 suggestions = searchSuggestions,
                 selectedCategory = selectedCategory,
                 selectedUrgency = selectedUrgency,
@@ -254,6 +370,7 @@ fun MapScreen(
                 onClearSearch = {
                     searchQuery = ""
                     searchSuggestions = emptyList()
+                    isSearchActive = false
                 },
                 onSuggestionSelected = { moveToSearchResult(it) },
                 modifier = Modifier
@@ -261,14 +378,61 @@ fun MapScreen(
                     .padding(16.dp)
             )
 
-            MapControl(
-                icon = Icons.Outlined.MyLocation,
-                description = "Mi ubicación",
-                onClick = { requestCurrentLocation() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 104.dp, end = 16.dp)
-            )
+            if (!isSearchActive && !isRouteOriginSearchActive) {
+                MapControls(
+                    onMyLocation = { requestCurrentLocation() },
+                    onZoomIn = { mapZoom = (mapZoom + 1.0).coerceAtMost(19.0) },
+                    onZoomOut = { mapZoom = (mapZoom - 1.0).coerceAtLeast(4.0) },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 132.dp, end = 16.dp)
+                )
+            }
+
+            if (showSelectedPlaceCard) selectedPlace?.let { place ->
+                SelectedPlaceCard(
+                    place = place,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp),
+                    routeResult = routeResult,
+                    routeResults = routeResults,
+                    selectedRouteIndex = selectedRouteIndex,
+                    originQuery = routeOriginQuery,
+                    originSuggestions = routeOriginSuggestions,
+                    isOriginSearchActive = isRouteOriginSearchActive,
+                    isRouteLoading = isRouteLoading,
+                    onOriginQueryChange = {
+                        routeOriginQuery = it
+                        isRouteOriginSearchActive = true
+                    },
+                    onClearOrigin = {
+                        routeOriginQuery = "Mi ubicación actual"
+                        routeOriginSuggestions = emptyList()
+                        isRouteOriginSearchActive = false
+                        routeOriginCoordinate = currentLocation ?: MapDefaults.UtcjLocation
+                        routePoints = emptyList()
+                        routeResults = emptyList()
+                        routeResult = null
+                    },
+                    onOriginSelected = { origin ->
+                        routeOriginQuery = origin.title
+                        routeOriginCoordinate = origin.coordinate
+                        routeOriginSuggestions = emptyList()
+                        isRouteOriginSearchActive = false
+                        routePoints = emptyList()
+                        routeResults = emptyList()
+                        routeResult = null
+                    },
+                    onRouteSelected = { index ->
+                        selectedRouteIndex = index
+                        routeResult = routeResults.getOrNull(index)
+                        routePoints = routeResults.getOrNull(index)?.points.orEmpty()
+                    },
+                    onRouteClick = { calculateRoute(place.coordinate) },
+                    onShowSelectedRoute = { showSelectedPlaceCard = false }
+                )
+            }
 
             selectedAlert?.let { alert ->
                 SelectedAlertCard(
@@ -313,6 +477,7 @@ fun MapScreen(
 @Composable
 private fun MapSearchPanel(
     searchQuery: String,
+    isSearchActive: Boolean,
     onSearchQueryChange: (String) -> Unit,
     suggestions: List<MapSearchResult>,
     selectedCategory: String,
@@ -383,7 +548,7 @@ private fun MapSearchPanel(
                 overflow = TextOverflow.Ellipsis
             )
 
-            if (searchQuery.length >= 2) {
+            if (isSearchActive && searchQuery.length >= 2) {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Surface(
@@ -791,6 +956,305 @@ private fun SelectedAlertCard(
 
 
 @Composable
+private fun SelectedPlaceCard(
+    place: MapSearchResult,
+    modifier: Modifier = Modifier,
+    routeResult: MapRouteResult?,
+    routeResults: List<MapRouteResult>,
+    selectedRouteIndex: Int,
+    originQuery: String,
+    originSuggestions: List<MapSearchResult>,
+    isOriginSearchActive: Boolean,
+    isRouteLoading: Boolean,
+    onOriginQueryChange: (String) -> Unit,
+    onClearOrigin: () -> Unit,
+    onOriginSelected: (MapSearchResult) -> Unit,
+    onRouteSelected: (Int) -> Unit,
+    onRouteClick: () -> Unit,
+    onShowSelectedRoute: () -> Unit
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 7.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Box(
+                modifier = Modifier
+                    .width(42.dp)
+                    .height(4.dp)
+                    .background(color = UrbanColors.MapLine, shape = CircleShape)
+                    .align(Alignment.CenterHorizontally)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MapPrimary.copy(alpha = 0.10f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        tint = MapPrimary,
+                        modifier = Modifier.padding(16.dp).size(30.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(13.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = place.title,
+                        color = MapText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        text = place.subtitle,
+                        color = MapText.copy(alpha = 0.62f),
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    routeResult?.let { route ->
+                        Text(
+                            text = "Ruta: ${route.summaryText}",
+                            color = MapPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = "Origen de ruta",
+                color = MapText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SearchInputBox(
+                value = originQuery,
+                onValueChange = onOriginQueryChange,
+                onSearch = {},
+                onClear = onClearOrigin,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (isOriginSearchActive && originQuery.length >= 2) {
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(15.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, UrbanColors.Border)
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        if (originSuggestions.isEmpty()) {
+                            Text(
+                                text = "Buscando origen cercano...",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                color = MapText.copy(alpha = 0.58f),
+                                fontSize = 12.sp
+                            )
+                        } else {
+                            originSuggestions.forEach { suggestion ->
+                                SearchSuggestionRow(
+                                    suggestion = suggestion,
+                                    onClick = { onOriginSelected(suggestion) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            if (routeResults.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    routeResults.forEachIndexed { index, route ->
+                        RouteOptionRow(
+                            routeNumber = index + 1,
+                            route = route,
+                            selected = index == selectedRouteIndex,
+                            onClick = { onRouteSelected(index) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            Button(
+                onClick = if (routeResults.isEmpty()) onRouteClick else onShowSelectedRoute,
+                enabled = !isRouteLoading,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(15.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MapPrimary)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Route,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Text(
+                    text = when {
+                        isRouteLoading -> "Calculando rutas..."
+                        routeResults.isEmpty() -> "Ver rutas"
+                        else -> "Ver ruta seleccionada"
+                    },
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RouteOptionRow(
+    routeNumber: Int,
+    route: MapRouteResult,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MapPrimary.copy(alpha = 0.10f) else UrbanColors.NeutralPanel,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) MapPrimary else UrbanColors.Border
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = if (selected) MapPrimary else MapText.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    text = routeNumber.toString(),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    color = if (selected) Color.White else MapText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = route.summaryText,
+                    color = MapText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+
+                Text(
+                    text = "${route.nearbyReports} reporte(s) cerca de esta ruta",
+                    color = if (route.nearbyReports == 0) MapPrimary else MapHigh,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Outlined.Check,
+                    contentDescription = "Ruta seleccionada",
+                    tint = MapPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapControls(
+    onMyLocation: () -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalAlignment = Alignment.End
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = Color.White,
+            shadowElevation = 5.dp,
+            onClick = onMyLocation
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.MyLocation,
+                contentDescription = "Mi ubicación",
+                tint = MapText,
+                modifier = Modifier.padding(13.dp)
+            )
+        }
+
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = Color.White,
+            shadowElevation = 5.dp
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onZoomIn) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = "Acercar",
+                        tint = MapText
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .height(1.dp)
+                        .background(UrbanColors.Border)
+                )
+
+                IconButton(onClick = onZoomOut) {
+                    Icon(
+                        imageVector = Icons.Outlined.Remove,
+                        contentDescription = "Alejar",
+                        tint = MapText
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MapControl(
     icon: ImageVector,
     description: String,
@@ -859,6 +1323,67 @@ private fun colorForUrgency(urgency: String): Color {
         "Baja" -> MapLow
         else -> MapPrimary
     }
+}
+
+private fun countReportsNearRoute(
+    routePoints: List<LatLng>,
+    alerts: List<UrbanAlert>,
+    thresholdMeters: Double = 250.0
+): Int {
+    if (routePoints.size < 2) return 0
+
+    return alerts.count { alert ->
+        val alertPoint = LatLng(alert.latitude, alert.longitude)
+        routePoints.windowed(2).any { segment ->
+            distancePointToSegmentMeters(
+                point = alertPoint,
+                segmentStart = segment[0],
+                segmentEnd = segment[1]
+            ) <= thresholdMeters
+        }
+    }
+}
+
+private fun distancePointToSegmentMeters(
+    point: LatLng,
+    segmentStart: LatLng,
+    segmentEnd: LatLng
+): Double {
+    val metersPerDegreeLat = 111_320.0
+    val metersPerDegreeLon = 111_320.0 * cos(Math.toRadians(point.latitude))
+
+    val px = point.longitude * metersPerDegreeLon
+    val py = point.latitude * metersPerDegreeLat
+    val ax = segmentStart.longitude * metersPerDegreeLon
+    val ay = segmentStart.latitude * metersPerDegreeLat
+    val bx = segmentEnd.longitude * metersPerDegreeLon
+    val by = segmentEnd.latitude * metersPerDegreeLat
+
+    val dx = bx - ax
+    val dy = by - ay
+
+    if (dx == 0.0 && dy == 0.0) {
+        return haversineMeters(point, segmentStart)
+    }
+
+    val t = (((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)).coerceIn(0.0, 1.0)
+    val closestX = ax + t * dx
+    val closestY = ay + t * dy
+
+    return sqrt((px - closestX).pow(2.0) + (py - closestY).pow(2.0))
+}
+
+private fun haversineMeters(from: LatLng, to: LatLng): Double {
+    val earthRadiusMeters = 6_371_000.0
+    val dLat = Math.toRadians(to.latitude - from.latitude)
+    val dLon = Math.toRadians(to.longitude - from.longitude)
+    val fromLat = Math.toRadians(from.latitude)
+    val toLat = Math.toRadians(to.latitude)
+
+    val a = sin(dLat / 2).pow(2.0) + cos(fromLat) * cos(toLat) * sin(dLon / 2).pow(2.0)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    return earthRadiusMeters * c
 }
 
 @Preview(showBackground = true, showSystemUi = true)

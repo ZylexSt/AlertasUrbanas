@@ -49,9 +49,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.alertasurbanas.data.MapDefaults
 import com.example.alertasurbanas.ui.screens.shared.MapTilerMap
 import com.example.alertasurbanas.ui.theme.UrbanColors
-import org.maplibre.android.geometry.LatLng
 
 @Composable
 fun AutomotiveMapDashboardScreen() {
@@ -62,7 +62,7 @@ fun AutomotiveMapDashboardScreen() {
     ) {
         MapTilerMap(
             modifier = Modifier.fillMaxSize(),
-            center = LatLng(31.761, -106.485),
+            center = MapDefaults.UtcjLocation,
             zoom = 13.2
         )
 
