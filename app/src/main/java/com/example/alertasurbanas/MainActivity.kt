@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
                             try {
                                 adminReportsError = ""
                                 isAdminReportsLoading = true
-                                allReports = reportRepository.getAllReports()
+                                allReports = reportRepository.getApprovedReports()
                             } catch (e: Exception) {
                                 adminReportsError = e.message ?: "No se pudieron cargar los reportes."
                             } finally {
@@ -179,7 +179,7 @@ class MainActivity : ComponentActivity() {
 
                     "Detalle" -> DetailAlertScreen(
                         report = selectedReport,
-                        canEdit = selectedReport?.status == "pending",
+                        canEdit = selectedReport?.status == "pending" || selectedReport?.status == "rejected",
                         canDelete = selectedReport?.id?.isNotBlank() == true,
                         isDeleting = isDeleteReportLoading,
                         onBack = {
@@ -191,7 +191,7 @@ class MainActivity : ComponentActivity() {
                         onEditReport = {
                             val reportToEdit = selectedReport
 
-                            if (reportToEdit?.id?.isNotBlank() == true && reportToEdit.status == "pending") {
+                            if (reportToEdit?.id?.isNotBlank() == true && (reportToEdit.status == "pending" || reportToEdit.status == "rejected")) {
                                 editingReportId = reportToEdit.id
                                 reportType = reportToEdit.type
                                 reportUrgency = reportToEdit.urgency
@@ -254,7 +254,7 @@ class MainActivity : ComponentActivity() {
                                             status = "approved"
                                         )
 
-                                        val updatedReport = reportToReview.copy(status = "approved")
+                                        val updatedReport = reportToReview.copy(status = "approved", rejectionReason = "")
                                         selectedReport = updatedReport
                                         allReports = allReports.map { report ->
                                             if (report.id == updatedReport.id) updatedReport else report
@@ -267,7 +267,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         },
-                        onRejectReport = {
+                        onRejectReport = { rejectionReason ->
                             val reportToReview = selectedReport
 
                             if (reportToReview?.id?.isNotBlank() == true) {
@@ -276,12 +276,15 @@ class MainActivity : ComponentActivity() {
                                         isReviewReportLoading = true
                                         adminReportsError = ""
 
-                                        reportRepository.updateReportStatus(
+                                        reportRepository.rejectReport(
                                             reportId = reportToReview.id,
-                                            status = "rejected"
+                                            reason = rejectionReason
                                         )
 
-                                        val updatedReport = reportToReview.copy(status = "rejected")
+                                        val updatedReport = reportToReview.copy(
+                                            status = "rejected",
+                                            rejectionReason = rejectionReason
+                                        )
                                         selectedReport = updatedReport
                                         allReports = allReports.map { report ->
                                             if (report.id == updatedReport.id) updatedReport else report
@@ -344,8 +347,10 @@ class MainActivity : ComponentActivity() {
                                             urgency = urgency,
                                             locationName = locationName,
                                             latitude = reportLatitude,
-                                            longitude = reportLongitude
-                                        )
+                                        longitude = reportLongitude,
+                                        status = "pending",
+                                        rejectionReason = ""
+                                    )
                                     )
 
                                     reportType = "Bache"
@@ -386,8 +391,8 @@ class MainActivity : ComponentActivity() {
                         },
                         locationName = reportLocationName,
                         screenTitle = "Editar reporte",
-                        screenSubtitle = "Actualiza la información mientras el reporte está pendiente.",
-                        submitButtonText = "Guardar cambios",
+                        screenSubtitle = if (selectedReport?.status == "rejected") "Corrige el reporte para enviarlo nuevamente a revision." else "Actualiza la informacion mientras el reporte esta pendiente.",
+                        submitButtonText = if (selectedReport?.status == "rejected") "Reenviar reporte" else "Guardar cambios",
                         isLoading = isReportLoading,
                         errorMessage = reportErrorMessage,
                         onSubmitReport = { type, description, urgency, locationName ->
@@ -412,7 +417,9 @@ class MainActivity : ComponentActivity() {
                                         urgency = urgency,
                                         locationName = locationName,
                                         latitude = reportLatitude,
-                                        longitude = reportLongitude
+                                        longitude = reportLongitude,
+                                        status = "pending",
+                                        rejectionReason = ""
                                     )
 
                                     if (updatedReport != null) {
@@ -444,8 +451,22 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
-                    "SeleccionarUbicacion" -> SelectLocationScreen(
-                        initialAddress = reportLocationName,
+                    "SeleccionarUbicacion" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                adminReportsError = ""
+                                isAdminReportsLoading = true
+                                allReports = reportRepository.getApprovedReports()
+                            } catch (e: Exception) {
+                                adminReportsError = e.message ?: "No se pudieron cargar los reportes."
+                            } finally {
+                                isAdminReportsLoading = false
+                            }
+                        }
+
+                        SelectLocationScreen(
+                            initialAddress = reportLocationName,
+                        nearbyAlerts = allReports.toMapAlerts(),
                         onBack = {
                             selectedScreen = locationReturnScreen
                         },
@@ -454,8 +475,9 @@ class MainActivity : ComponentActivity() {
                             reportLatitude = selectedCoordinate.latitude
                             reportLongitude = selectedCoordinate.longitude
                             selectedScreen = locationReturnScreen
-                        }
-                    )
+                            }
+                        )
+                    }
 
                     "Alertas" -> {
                         LaunchedEffect(Unit) {
@@ -593,7 +615,7 @@ class MainActivity : ComponentActivity() {
                             try {
                                 adminReportsError = ""
                                 isAdminReportsLoading = true
-                                allReports = reportRepository.getAllReports()
+                                allReports = reportRepository.getApprovedReports()
                             } catch (e: Exception) {
                                 adminReportsError = e.message ?: "No se pudieron cargar los reportes."
                             } finally {
@@ -602,7 +624,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         HomeScreen(
-                            reports = allReports.filter { it.status == "approved" },
+                            reports = allReports,
                             isLoading = isAdminReportsLoading,
                             errorMessage = adminReportsError,
                             onOpenReport = { report ->

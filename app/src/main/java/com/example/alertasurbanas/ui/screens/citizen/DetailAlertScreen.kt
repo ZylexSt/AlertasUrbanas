@@ -1,4 +1,4 @@
-﻿package com.example.alertasurbanas.ui.screens.citizen
+package com.example.alertasurbanas.ui.screens.citizen
 
 import com.example.alertasurbanas.R
 import com.example.alertasurbanas.model.UrbanReport
@@ -49,9 +49,11 @@ fun DetailAlertScreen(
     onEditReport: () -> Unit = {},
     onDeleteReport: () -> Unit = {},
     onApproveReport: () -> Unit = {},
-    onRejectReport: () -> Unit = {}
+    onRejectReport: (String) -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showRejectDialog by remember { mutableStateOf(false) }
+    var rejectionReason by remember { mutableStateOf("") }
 
     val activeReport = report ?: UrbanReport(
         type = "Reporte",
@@ -142,12 +144,18 @@ fun DetailAlertScreen(
                 RecommendationCard()
             }
 
+
+            if (activeReport.status == "rejected" && activeReport.rejectionReason.isNotBlank()) {
+                item {
+                    RejectionReasonCard(reason = activeReport.rejectionReason)
+                }
+            }
             if (canReview) {
                 item {
                     AdminReviewActions(
                         isReviewing = isReviewing,
                         onApproveReport = onApproveReport,
-                        onRejectReport = onRejectReport
+                        onRejectReport = { showRejectDialog = true }
                     )
                 }
             }
@@ -192,6 +200,26 @@ fun DetailAlertScreen(
             }
         )
     }
+
+    if (showRejectDialog) {
+        RejectReportDialog(
+            reason = rejectionReason,
+            isReviewing = isReviewing,
+            onReasonChange = { rejectionReason = it },
+            onDismiss = {
+                if (!isReviewing) showRejectDialog = false
+            },
+            onConfirm = {
+                val cleanReason = rejectionReason.trim()
+                if (cleanReason.isNotBlank()) {
+                    onRejectReport(cleanReason)
+                    showRejectDialog = false
+                    rejectionReason = ""
+                }
+            }
+        )
+    }
+
 }
 
 @Composable
@@ -406,6 +434,35 @@ private fun DescriptionSection(description: String) {
 }
 
 @Composable
+private fun RejectionReasonCard(reason: String) {
+    Card(
+        shape = RoundedCornerShape(17.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = DetailDanger.copy(alpha = 0.08f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(15.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Motivo de rechazo",
+                color = DetailDanger,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = reason,
+                color = DetailText.copy(alpha = 0.78f),
+                fontSize = 14.sp,
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
+
+@Composable
 private fun RecommendationCard() {
     Card(
         shape = RoundedCornerShape(17.dp),
@@ -447,6 +504,70 @@ private fun RecommendationCard() {
             }
         }
     }
+}
+
+@Composable
+private fun RejectReportDialog(
+    reason: String,
+    isReviewing: Boolean,
+    onReasonChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = "Rechazar reporte")
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Escribe el motivo para que el ciudadano sepa que corregir.",
+                    color = DetailText.copy(alpha = 0.72f),
+                    fontSize = 14.sp
+                )
+
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = onReasonChange,
+                    enabled = !isReviewing,
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    label = {
+                        Text(text = "Motivo")
+                    },
+                    placeholder = {
+                        Text(text = "Ej. La evidencia no corresponde al incidente.")
+                    }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = !isReviewing && reason.trim().isNotBlank()
+            ) {
+                if (isReviewing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(text = "Rechazar", color = DetailDanger)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isReviewing
+            ) {
+                Text(text = "Cancelar")
+            }
+        }
+    )
 }
 
 @Composable

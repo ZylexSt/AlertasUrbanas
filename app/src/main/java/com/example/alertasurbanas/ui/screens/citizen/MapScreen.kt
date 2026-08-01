@@ -144,7 +144,18 @@ fun MapScreen(
     var routeOriginCoordinate by remember { mutableStateOf<LatLng?>(null) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val allAlerts = if (alerts.isNotEmpty()) alerts else AlertRepository.publicAlerts
+    val distanceOrigin = currentLocation ?: MapDefaults.UtcjLocation
+    val allAlerts = (if (alerts.isNotEmpty()) alerts else AlertRepository.publicAlerts)
+        .map { alert ->
+            alert.copy(
+                distanceText = formatDistance(
+                    haversineMeters(distanceOrigin, LatLng(alert.latitude, alert.longitude))
+                )
+            )
+        }
+        .sortedBy { alert ->
+            haversineMeters(distanceOrigin, LatLng(alert.latitude, alert.longitude))
+        }
     val filteredAlerts = allAlerts.filter { alert ->
         (selectedCategory == "Todas" || alert.category == selectedCategory) &&
             (selectedUrgency == "Todas" || alert.urgency == selectedUrgency)
@@ -941,7 +952,7 @@ private fun SelectedAlertCard(
                     }
 
                     MapInformation(icon = Icons.Outlined.LocationOn, text = alert.address)
-                    MapInformation(icon = Icons.Outlined.NearMe, text = "A ${alert.distanceText}")
+                    MapInformation(icon = Icons.Outlined.NearMe, text = alert.distanceText)
                     MapInformation(icon = Icons.Outlined.Schedule, text = alert.timeText)
                 }
 
@@ -1374,6 +1385,13 @@ private fun distancePointToSegmentMeters(
     return sqrt((px - closestX).pow(2.0) + (py - closestY).pow(2.0))
 }
 
+private fun formatDistance(distanceMeters: Double): String {
+    return if (distanceMeters < 1000.0) {
+        "A ${distanceMeters.toInt()} m"
+    } else {
+        "A ${String.format("%.1f", distanceMeters / 1000.0)} km"
+    }
+}
 private fun haversineMeters(from: LatLng, to: LatLng): Double {
     val earthRadiusMeters = 6_371_000.0
     val dLat = Math.toRadians(to.latitude - from.latitude)

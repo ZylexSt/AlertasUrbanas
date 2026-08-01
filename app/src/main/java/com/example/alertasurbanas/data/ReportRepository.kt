@@ -36,6 +36,18 @@ class ReportRepository {
             }
     }
 
+
+    suspend fun getApprovedReports(): List<UrbanReport> {
+        return reportsCollection
+            .whereEqualTo("status", "approved")
+            .get()
+            .await()
+            .documents
+            .mapNotNull { document ->
+                document.toObject(UrbanReport::class.java)?.copy(id = document.id)
+            }
+            .sortedByDescending { report -> report.createdAt }
+    }
     suspend fun getMyReports(): List<UrbanReport> {
         val currentUser = auth.currentUser
             ?: throw Exception("Debes iniciar sesion para ver tus reportes")
@@ -71,7 +83,9 @@ class ReportRepository {
                     "urgency" to urgency,
                     "locationName" to locationName,
                     "latitude" to latitude,
-                    "longitude" to longitude
+                    "longitude" to longitude,
+                    "status" to "pending",
+                    "rejectionReason" to ""
                 )
             )
             .await()
@@ -81,9 +95,29 @@ class ReportRepository {
         reportId: String,
         status: String
     ) {
+        val updates = mutableMapOf<String, Any>("status" to status)
+        if (status == "approved") {
+            updates["rejectionReason"] = ""
+        }
+
         reportsCollection
             .document(reportId)
-            .update("status", status)
+            .update(updates)
+            .await()
+    }
+
+    suspend fun rejectReport(
+        reportId: String,
+        reason: String
+    ) {
+        reportsCollection
+            .document(reportId)
+            .update(
+                mapOf(
+                    "status" to "rejected",
+                    "rejectionReason" to reason
+                )
+            )
             .await()
     }
 

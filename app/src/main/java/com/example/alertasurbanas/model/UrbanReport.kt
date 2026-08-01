@@ -14,5 +14,6 @@ data class UrbanReport(
     val userId: String = "",
     val userName: String = "",
     val createdAt: Long = System.currentTimeMillis(),
-    val photoUrl: String = ""
+    val photoUrl: String = "",
+    val rejectionReason: String = ""
 )

@@ -88,6 +88,7 @@ private val LocationText = UrbanColors.TextPrimary
 @Composable
 fun SelectLocationScreen(
     initialAddress: String = "Av. Independencia 250, Col. Centro",
+    nearbyAlerts: List<UrbanAlert> = emptyList(),
     onBack: () -> Unit = {},
     onConfirm: (String, LatLng) -> Unit = { _, _ -> }
 ) {
@@ -200,7 +201,7 @@ fun SelectLocationScreen(
             isRouteLoading = true
             val results = MapRouteService.drivingRoutes(origin, destination, targetCount = 3)
                 .map { route ->
-                    route.withNearbyReports(countReportsNearRoute(route.points, AlertRepository.publicAlerts))
+                    route.withNearbyReports(countReportsNearRoute(route.points, nearbyAlerts.ifEmpty { AlertRepository.publicAlerts }))
                 }
                 .sortedWith(compareBy<MapRouteResult> { it.nearbyReports }.thenBy { it.durationMinutes })
             isRouteLoading = false

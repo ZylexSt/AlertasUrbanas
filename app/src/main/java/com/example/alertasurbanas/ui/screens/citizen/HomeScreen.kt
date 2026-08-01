@@ -27,8 +27,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
+import com.example.alertasurbanas.data.MapDefaults
 import com.example.alertasurbanas.model.UrbanReport
+import org.maplibre.android.geometry.LatLng
 import java.util.concurrent.TimeUnit
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 
 private val Background = UrbanColors.Background
@@ -60,7 +67,13 @@ fun HomeScreen(
         AlertCategory("Seguridad", Icons.Outlined.Shield)
     )
 
-    val nearbyReports = reports.take(2)
+        val distanceOrigin = MapDefaults.UtcjLocation
+    val nearbyReports = reports
+        .filter { it.latitude != null && it.longitude != null }
+        .sortedBy { report ->
+            haversineMeters(distanceOrigin, LatLng(report.latitude ?: 0.0, report.longitude ?: 0.0))
+        }
+        .take(2)
 
     Scaffold(
         containerColor = Background,
@@ -82,7 +95,7 @@ fun HomeScreen(
         ) {
             item { Header() }
             item { SearchBar() }
-            item { NearbyAlert() }
+            item { NearbyAlert(report = nearbyReports.firstOrNull(), reference = distanceOrigin) }
 
             item {
                 AIHomeBanner(
@@ -246,7 +259,13 @@ private fun SearchBar() {
 }
 
 @Composable
-private fun NearbyAlert() {
+private fun NearbyAlert(
+    report: UrbanReport?,
+    reference: LatLng
+) {
+    val title = report?.type?.ifBlank { "Reporte urbano" } ?: "Sin alertas cercanas"
+    val distanceText = report?.let { formatReportDistance(it, reference) } ?: "Aún no hay reportes validados cerca"
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -279,9 +298,11 @@ private fun NearbyAlert() {
                 )
 
                 Text(
-                    text = "Bache peligroso a 120 m de ti",
+                    text = "$title · $distanceText",
                     fontSize = 12.sp,
-                    color = TextPrimary.copy(alpha = 0.65f)
+                    color = TextPrimary.copy(alpha = 0.65f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -400,7 +421,7 @@ private fun AlertCard(
 
                 AlertInformation(
                     icon = Icons.Outlined.NearMe,
-                    text = "Ubicacion reportada"
+                    text = formatReportDistance(report, MapDefaults.UtcjLocation)
                 )
 
                 AlertInformation(
@@ -564,6 +585,32 @@ private fun formatReportDate(createdAt: Long): String {
     }
 }
 
+private fun formatReportDistance(report: UrbanReport, reference: LatLng): String {
+    val latitude = report.latitude ?: return "Ubicación reportada"
+    val longitude = report.longitude ?: return "Ubicación reportada"
+    return formatDistance(haversineMeters(reference, LatLng(latitude, longitude)))
+}
+
+private fun formatDistance(distanceMeters: Double): String {
+    return if (distanceMeters < 1000.0) {
+        "A ${distanceMeters.toInt()} m"
+    } else {
+        "A ${String.format("%.1f", distanceMeters / 1000.0)} km"
+    }
+}
+
+private fun haversineMeters(from: LatLng, to: LatLng): Double {
+    val earthRadiusMeters = 6_371_000.0
+    val dLat = Math.toRadians(to.latitude - from.latitude)
+    val dLon = Math.toRadians(to.longitude - from.longitude)
+    val fromLat = Math.toRadians(from.latitude)
+    val toLat = Math.toRadians(to.latitude)
+
+    val a = sin(dLat / 2).pow(2.0) + cos(fromLat) * cos(toLat) * sin(dLon / 2).pow(2.0)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    return earthRadiusMeters * c
+}
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 private fun HomeScreenPreview() {
