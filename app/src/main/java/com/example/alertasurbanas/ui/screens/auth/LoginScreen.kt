@@ -2,15 +2,13 @@ package com.example.alertasurbanas.ui.screens.auth
 
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,12 +22,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.alertasurbanas.ui.screens.shared.UrbanAppLogo
 
 private val Background = UrbanColors.Background
 private val Primary = UrbanColors.Primary
 private val TextPrimary = UrbanColors.TextPrimary
 private val TextSecondary = UrbanColors.TextSecondary
-private val Terracotta = UrbanColors.Terracotta
 private val ErrorRed = UrbanColors.HighUrgency
 
 @Composable
@@ -43,6 +41,7 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
 
     val visibleError = localError.ifBlank { errorMessage }
 
@@ -55,20 +54,7 @@ fun LoginScreen(
     ) {
         Spacer(modifier = Modifier.height(26.dp))
 
-        Box(
-            modifier = Modifier
-                .size(58.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(Primary),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Shield,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(32.dp)
-            )
-        }
+        UrbanAppLogo(size = 68.dp)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -119,8 +105,12 @@ fun LoginScreen(
                 localError = ""
             },
             leadingIcon = Icons.Outlined.Lock,
-            trailingIcon = Icons.Outlined.VisibilityOff,
-            isPassword = true
+            trailingIcon = if (showPassword) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+            onTrailingIconClick = {
+                showPassword = !showPassword
+            },
+            isPassword = true,
+            passwordVisible = showPassword
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -189,25 +179,6 @@ fun LoginScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
-
-        Text(
-            text = "O inicia con",
-            color = TextSecondary,
-            fontSize = 13.sp
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SocialButton("G", Modifier.weight(1f))
-            SocialButton("f", Modifier.weight(1f))
-            SocialButton("●", Modifier.weight(1f))
-        }
-
         Spacer(modifier = Modifier.weight(1f))
     }
 }
@@ -274,7 +245,9 @@ fun AuthField(
     onValueChange: (String) -> Unit,
     leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
     trailingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onTrailingIconClick: () -> Unit = {},
     isPassword: Boolean = false,
+    passwordVisible: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -300,41 +273,26 @@ fun AuthField(
             },
             trailingIcon = trailingIcon?.let {
                 {
-                    Icon(
-                        imageVector = it,
-                        contentDescription = null,
-                        tint = TextSecondary
-                    )
+                    IconButton(onClick = onTrailingIconClick) {
+                        Icon(
+                            imageVector = it,
+                            contentDescription = if (passwordVisible) "Ocultar contraseña" else "Ver contraseña",
+                            tint = TextSecondary
+                        )
+                    }
                 }
             },
-            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            visualTransformation = if (isPassword && !passwordVisible) {
+                PasswordVisualTransformation()
+            } else {
+                VisualTransformation.None
+            },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Primary,
                 unfocusedBorderColor = UrbanColors.Border,
                 focusedContainerColor = Color.White,
                 unfocusedContainerColor = Color.White
             )
-        )
-    }
-}
-
-@Composable
-private fun SocialButton(
-    text: String,
-    modifier: Modifier = Modifier
-) {
-    OutlinedButton(
-        onClick = {},
-        modifier = modifier.height(52.dp),
-        shape = RoundedCornerShape(15.dp),
-        border = BorderStroke(1.dp, UrbanColors.Border),
-        colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White)
-    ) {
-        Text(
-            text = text,
-            color = Terracotta,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
         )
     }
 }

@@ -51,6 +51,11 @@ android {
             "GEOAPIFY_API_KEY",
             "\"${localProperty("GEOAPIFY_API_KEY")}\""
         )
+        buildConfigField(
+            "String",
+            "AI_API_BASE_URL",
+            "\"${localProperty("AI_API_BASE_URL").ifBlank { "http://10.0.2.2:8000" }}\""
+        )
     }
 
     buildTypes {
@@ -102,4 +107,3 @@ dependencies {
     // Nuevo
     implementation("androidx.compose.material:material-icons-extended")
 }
-

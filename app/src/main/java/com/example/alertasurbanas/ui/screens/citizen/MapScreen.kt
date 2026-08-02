@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Construction
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Lightbulb
@@ -1317,13 +1318,15 @@ private fun MapInformation(
 }
 
 private fun iconForCategory(category: String): ImageVector {
-    return when (category) {
-        "Tránsito" -> Icons.Outlined.DirectionsCar
-        "Vía pública" -> Icons.Outlined.Construction
-        "Iluminación" -> Icons.Outlined.Lightbulb
-        "Seguridad" -> Icons.Outlined.Shield
-        "Incendio" -> Icons.Outlined.LocalFireDepartment
-        "Alta", "Media", "Baja" -> Icons.Outlined.ReportProblem
+    val normalized = category.lowercase()
+    return when {
+        normalized.contains("bache") || normalized.contains("vía") || normalized.contains("via") -> Icons.Outlined.Construction
+        normalized.contains("luminaria") || normalized.contains("ilumin") -> Icons.Outlined.Lightbulb
+        normalized.contains("residuo") || normalized.contains("basura") -> Icons.Outlined.Delete
+        normalized.contains("tránsito") || normalized.contains("transito") || normalized.contains("choque") || normalized.contains("veh") -> Icons.Outlined.DirectionsCar
+        normalized.contains("seguridad") || normalized.contains("riesgo") -> Icons.Outlined.Shield
+        normalized.contains("incendio") || normalized.contains("fuego") -> Icons.Outlined.LocalFireDepartment
+        normalized == "alta" || normalized == "media" || normalized == "baja" -> Icons.Outlined.ReportProblem
         else -> Icons.Outlined.Traffic
     }
 }

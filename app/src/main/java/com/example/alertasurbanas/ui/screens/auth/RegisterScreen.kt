@@ -9,18 +9,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.alertasurbanas.ui.screens.shared.UrbanAppLogo
 
 private val RegisterBackground = UrbanColors.Background
 private val RegisterPrimary = UrbanColors.Primary
@@ -40,6 +40,7 @@ fun RegisterScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
 
     val visibleError = localError.ifBlank { errorMessage }
 
@@ -52,20 +53,7 @@ fun RegisterScreen(
     ) {
         Spacer(modifier = Modifier.height(18.dp))
 
-        Box(
-            modifier = Modifier
-                .size(58.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(RegisterPrimary),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Shield,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(32.dp)
-            )
-        }
+        UrbanAppLogo(size = 68.dp)
 
         Spacer(modifier = Modifier.height(22.dp))
 
@@ -142,8 +130,12 @@ fun RegisterScreen(
                 localError = ""
             },
             leadingIcon = Icons.Outlined.Lock,
-            trailingIcon = Icons.Outlined.VisibilityOff,
-            isPassword = true
+            trailingIcon = if (showPassword) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+            onTrailingIconClick = {
+                showPassword = !showPassword
+            },
+            isPassword = true,
+            passwordVisible = showPassword
         )
 
         Spacer(modifier = Modifier.height(10.dp))

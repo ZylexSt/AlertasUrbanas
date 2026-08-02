@@ -515,14 +515,29 @@ class MainActivity : ComponentActivity() {
                         }
                     )
 
-                    "IA" -> AIRecommendationsScreen(
-                        onBack = {
-                            selectedScreen = "Inicio"
-                        },
-                        onNavigate = {
-                            selectedScreen = it
+                    "IA" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                adminReportsError = ""
+                                isAdminReportsLoading = true
+                                allReports = reportRepository.getApprovedReports()
+                            } catch (e: Exception) {
+                                adminReportsError = e.message ?: "No se pudieron cargar los reportes."
+                            } finally {
+                                isAdminReportsLoading = false
+                            }
                         }
-                    )
+
+                        AIRecommendationsScreen(
+                            reports = allReports,
+                            onBack = {
+                                selectedScreen = "Inicio"
+                            },
+                            onNavigate = {
+                                selectedScreen = it
+                            }
+                        )
+                    }
 
                     "Perfil" -> {
                         if (currentUserRole == "admin") {

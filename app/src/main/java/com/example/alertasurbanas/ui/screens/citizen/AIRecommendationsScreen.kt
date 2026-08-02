@@ -1,10 +1,22 @@
 package com.example.alertasurbanas.ui.screens.citizen
 
+import com.example.alertasurbanas.data.AIRecommendationEngine
+import com.example.alertasurbanas.data.AIRecommendationApi
+import com.example.alertasurbanas.data.AIRecommendationResult
+import com.example.alertasurbanas.data.AIRiskZone
+import com.example.alertasurbanas.data.AlertRepository
+import com.example.alertasurbanas.data.MapDefaults
+import com.example.alertasurbanas.data.MapRiskZone
+import com.example.alertasurbanas.data.MapRouteResult
+import com.example.alertasurbanas.data.MapRouteService
+import com.example.alertasurbanas.data.MapSearchService
+import com.example.alertasurbanas.data.UrbanAlert
+import com.example.alertasurbanas.model.UrbanReport
+import com.example.alertasurbanas.ui.screens.shared.MapTilerMap
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,63 +30,126 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
+import org.maplibre.android.geometry.LatLng
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 private val AIBackground = UrbanColors.Background
 private val AIPrimary = UrbanColors.Primary
 private val AIText = UrbanColors.TextPrimary
 private val AIOrange = UrbanColors.Terracotta
-private val AIWarning = UrbanColors.MediumUrgency
-private val AIDanger = UrbanColors.HighUrgency
 
-private data class AIRecommendation(
-    val title: String,
-    val description: String,
-    val label: String,
-    val color: Color,
-    val icon: ImageVector
+private data class SaferStreetSuggestion(
+    val name: String,
+    val coordinate: LatLng,
+    val nearbyAlertCount: Int,
+    val highestRisk: String
 )
 
 @Composable
 fun AIRecommendationsScreen(
     onBack: () -> Unit = {},
-    onNavigate: (String) -> Unit = {}
+    onNavigate: (String) -> Unit = {},
+    reports: List<UrbanReport> = emptyList(),
+    alerts: List<UrbanAlert> = AlertRepository.publicAlerts
 ) {
     var selectedPeriod by rememberSaveable {
         mutableStateOf("Ahora")
     }
 
-    val recommendations = listOf(
-        AIRecommendation(
-            title = "Evita Av. Reforma",
-            description = "Se detectaron varios incidentes y tráfico lento entre las 5:00 y 7:00 p. m.",
-            label = "Riesgo alto",
-            color = AIDanger,
-            icon = Icons.Outlined.WarningAmber
-        ),
-        AIRecommendation(
-            title = "Utiliza Blvd. Central",
-            description = "Esta alternativa presenta menos alertas y podría ahorrar aproximadamente 8 minutos.",
-            label = "Ruta sugerida",
-            color = AIPrimary,
-            icon = Icons.Outlined.Route
-        ),
-        AIRecommendation(
-            title = "Precaución en zona centro",
-            description = "Los reportes de baches aumentan después de lluvias intensas.",
-            label = "Predicción",
-            color = AIWarning,
-            icon = Icons.Outlined.AutoGraph
+    val liveAlerts = remember(reports, alerts) {
+        if (reports.isNotEmpty()) reports.toAIAlerts() else alerts
+    }
+
+    var isUsingRemoteAI by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var isLoadingRemoteAI by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var riskSummary by remember(liveAlerts, selectedPeriod) {
+        mutableStateOf(AIRecommendationEngine.analyze(liveAlerts))
+    }
+
+    var selectedZoneId by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    val selectedZone = remember(riskSummary.zones, selectedZoneId) {
+        riskSummary.zones.firstOrNull { it.id == selectedZoneId }
+            ?: riskSummary.zones.firstOrNull()
+    }
+
+    var zoneRoutes by remember {
+        mutableStateOf<List<MapRouteResult>>(emptyList())
+    }
+
+    var saferStreets by remember {
+        mutableStateOf<List<SaferStreetSuggestion>>(emptyList())
+    }
+
+    var selectedRouteIndex by rememberSaveable {
+        mutableStateOf(0)
+    }
+
+    LaunchedEffect(reports, selectedPeriod) {
+        if (reports.isEmpty()) {
+            riskSummary = AIRecommendationEngine.analyze(liveAlerts)
+            isUsingRemoteAI = false
+            return@LaunchedEffect
+        }
+
+        isLoadingRemoteAI = true
+        val remoteSummary = AIRecommendationApi.getRecommendations(reports)
+        isLoadingRemoteAI = false
+
+        if (remoteSummary != null) {
+            riskSummary = remoteSummary
+            isUsingRemoteAI = true
+        } else {
+            riskSummary = AIRecommendationEngine.analyze(liveAlerts)
+            isUsingRemoteAI = false
+        }
+    }
+
+    LaunchedEffect(selectedZone?.id, liveAlerts) {
+        val zone = selectedZone ?: return@LaunchedEffect
+        selectedRouteIndex = 0
+        saferStreets = emptyList()
+        zoneRoutes = MapRouteService.drivingRoutes(
+            origin = MapDefaults.UtcjLocation,
+            destination = LatLng(zone.latitude, zone.longitude),
+            targetCount = 3
+        ).map { route ->
+            route.withNearbyReports(
+                countReportsNearRoute(
+                    route = route.points,
+                    alerts = liveAlerts
+                )
+            )
+        }.sortedWith(
+            compareBy<MapRouteResult> { it.nearbyReports }
+                .thenBy { it.durationMinutes }
+                .thenBy { it.distanceKm }
         )
-    )
+
+        saferStreets = findSaferNearbyStreets(
+            zone = zone,
+            alerts = liveAlerts
+        )
+    }
 
     Scaffold(
         containerColor = AIBackground,
@@ -102,7 +177,14 @@ fun AIRecommendationsScreen(
             }
 
             item {
-                AIHeroCard()
+                AIHeroCard(
+                    title = riskSummary.title,
+                    description = when {
+                        isLoadingRemoteAI -> "Consultando la red neuronal en Python con reportes recientes..."
+                        isUsingRemoteAI -> "${riskSummary.description} · IA conectada"
+                        else -> "${riskSummary.description} · modo local"
+                    }
+                )
             }
 
             item {
@@ -137,7 +219,22 @@ fun AIRecommendationsScreen(
             }
 
             item {
-                RiskMapCard()
+                AIRiskMapCard(
+                    zones = riskSummary.zones,
+                    alerts = liveAlerts,
+                    selectedZone = selectedZone,
+                    saferStreets = saferStreets,
+                    routes = zoneRoutes,
+                    selectedRouteIndex = selectedRouteIndex,
+                    onSelectRoute = { selectedRouteIndex = it },
+                    onSelectZone = { zone ->
+                        selectedZoneId = zone.id
+                    },
+                    analyzedZones = riskSummary.analyzedZones,
+                    highRiskZones = riskSummary.highRiskZones,
+                    mediumRiskZones = riskSummary.mediumRiskZones,
+                    lowRiskZones = riskSummary.lowRiskZones
+                )
             }
 
             item {
@@ -149,7 +246,7 @@ fun AIRecommendationsScreen(
                 )
             }
 
-            items(recommendations) {
+            items(riskSummary.recommendations) {
                 AIRecommendationCard(it)
             }
 
@@ -192,7 +289,10 @@ private fun AIHeader(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AIHeroCard() {
+private fun AIHeroCard(
+    title: String,
+    description: String
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -223,14 +323,14 @@ private fun AIHeroCard() {
             Spacer(modifier = Modifier.height(15.dp))
 
             Text(
-                text = "Riesgo moderado en tu zona",
+                text = title,
                 color = Color.White,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = "La IA analizó reportes recientes, horarios y zonas con incidentes recurrentes.",
+                text = description,
                 color = Color.White.copy(alpha = 0.83f),
                 fontSize = 13.sp,
                 lineHeight = 19.sp
@@ -240,7 +340,43 @@ private fun AIHeroCard() {
 }
 
 @Composable
-private fun RiskMapCard() {
+private fun AIRiskMapCard(
+    zones: List<AIRiskZone>,
+    alerts: List<UrbanAlert>,
+    selectedZone: AIRiskZone?,
+    saferStreets: List<SaferStreetSuggestion>,
+    routes: List<MapRouteResult>,
+    selectedRouteIndex: Int,
+    onSelectRoute: (Int) -> Unit,
+    onSelectZone: (AIRiskZone) -> Unit,
+    analyzedZones: Int,
+    highRiskZones: Int,
+    mediumRiskZones: Int,
+    lowRiskZones: Int
+) {
+    val zoneAlerts = remember(zones) {
+        zones.map { zone ->
+            UrbanAlert(
+                id = "ai-zone-${zone.id}",
+                title = zone.title,
+                category = zone.dominantCategory,
+                address = "${zone.reportCount} reporte(s) detectado(s)",
+                description = zone.recommendation,
+                urgency = zone.riskLevel,
+                distanceText = "Zona IA",
+                timeText = "Actualizado ahora",
+                latitude = zone.latitude,
+                longitude = zone.longitude
+            )
+        }
+    }
+
+    val mapCenter = selectedZone?.let {
+        LatLng(it.latitude, it.longitude)
+    } ?: zones.firstOrNull()?.let {
+        LatLng(it.latitude, it.longitude)
+    } ?: MapDefaults.UtcjLocation
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -251,58 +387,65 @@ private fun RiskMapCard() {
         )
     ) {
         Column {
-            Canvas(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
-                    .background(UrbanColors.NeutralPanel)
+                    .height(260.dp)
             ) {
-                val street = 7.dp.toPx()
+                MapTilerMap(
+                    modifier = Modifier.fillMaxSize(),
+                    center = mapCenter,
+                    zoom = 14.0,
+                    alerts = zoneAlerts,
+                    currentLocation = MapDefaults.UtcjLocation,
+                    riskZones = zones.map { zone ->
+                        MapRiskZone(
+                            id = zone.id,
+                            latitude = zone.latitude,
+                            longitude = zone.longitude,
+                            riskLevel = zone.riskLevel,
+                            reportCount = zone.reportCount,
+                            radiusMeters = when (zone.riskLevel) {
+                                "Alta" -> 520.0
+                                "Media" -> 420.0
+                                else -> 320.0
+                            } + (zone.reportCount * 35.0)
+                        )
+                    },
+                    routeLines = routes.map { it.points },
+                    selectedRouteIndex = selectedRouteIndex,
+                    onAlertSelected = { alert ->
+                        zones.firstOrNull { "ai-zone-${it.id}" == alert.id }?.let(onSelectZone)
+                    }
+                )
 
-                listOf(0.2f, 0.5f, 0.8f).forEach {
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(0f, size.height * it),
-                        end = Offset(size.width, size.height * it),
-                        strokeWidth = street
-                    )
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp),
+                    color = Color.White.copy(alpha = 0.94f),
+                    shape = RoundedCornerShape(16.dp),
+                    tonalElevation = 3.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.AutoAwesome,
+                            contentDescription = null,
+                            tint = AIPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(7.dp))
+                        Text(
+                            text = "Mapa IA",
+                            color = AIText,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
-
-                listOf(0.2f, 0.5f, 0.8f).forEach {
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(size.width * it, 0f),
-                        end = Offset(size.width * it, size.height),
-                        strokeWidth = street
-                    )
-                }
-
-                drawCircle(
-                    color = AIDanger.copy(alpha = 0.32f),
-                    radius = 48.dp.toPx(),
-                    center = Offset(
-                        size.width * 0.67f,
-                        size.height * 0.40f
-                    )
-                )
-
-                drawCircle(
-                    color = AIWarning.copy(alpha = 0.32f),
-                    radius = 38.dp.toPx(),
-                    center = Offset(
-                        size.width * 0.28f,
-                        size.height * 0.64f
-                    )
-                )
-
-                drawCircle(
-                    color = AIPrimary.copy(alpha = 0.35f),
-                    radius = 22.dp.toPx(),
-                    center = Offset(
-                        size.width * 0.52f,
-                        size.height * 0.73f
-                    )
-                )
             }
 
             Row(
@@ -319,25 +462,193 @@ private fun RiskMapCard() {
 
                 Column {
                     Text(
-                        text = "3 zonas analizadas",
+                    text = "$analyzedZones zonas analizadas",
                         color = AIText,
                         fontWeight = FontWeight.Bold
                     )
 
                     Text(
-                        text = "Actualizado hace 5 minutos",
+                        text = "$highRiskZones alta(s), $mediumRiskZones media(s), $lowRiskZones baja(s) · actualizado ahora",
                         color = AIText.copy(alpha = 0.6f),
                         fontSize = 11.sp
                     )
                 }
+            }
+
+            selectedZone?.let { zone ->
+                Divider(color = UrbanColors.Border.copy(alpha = 0.7f))
+                AISelectedZoneCard(
+                    zone = zone,
+                    saferStreets = saferStreets,
+                    routes = routes,
+                    selectedRouteIndex = selectedRouteIndex,
+                    onSelectRoute = onSelectRoute
+                )
             }
         }
     }
 }
 
 @Composable
+private fun AISelectedZoneCard(
+    zone: AIRiskZone,
+    saferStreets: List<SaferStreetSuggestion>,
+    routes: List<MapRouteResult>,
+    selectedRouteIndex: Int,
+    onSelectRoute: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(15.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = riskColor(zone.riskLevel).copy(alpha = 0.12f)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.WarningAmber,
+                    contentDescription = null,
+                    tint = riskColor(zone.riskLevel),
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = zone.title,
+                    color = AIText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp
+                )
+                Text(
+                    text = zone.recommendation,
+                    color = AIText.copy(alpha = 0.65f),
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                Text(
+                    text = "${zone.reportCount} reporte(s) · ${zone.dominantCategory}",
+                    color = riskColor(zone.riskLevel),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        if (saferStreets.isNotEmpty()) {
+            Text(
+                text = "Calles o sectores cercanos con menos alertas",
+                color = AIText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            saferStreets.take(3).forEach { street ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            color = UrbanColors.NeutralPanel,
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = riskColor(street.highestRisk).copy(alpha = 0.13f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CheckCircle,
+                            contentDescription = null,
+                            tint = riskColor(street.highestRisk),
+                            modifier = Modifier.padding(8.dp).size(18.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = street.name,
+                            color = AIText,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            maxLines = 1
+                        )
+                        Text(
+                            text = if (street.nearbyAlertCount == 0) {
+                                "Sin alertas cercanas detectadas"
+                            } else {
+                                "${street.nearbyAlertCount} alerta(s) cercana(s) · riesgo ${street.highestRisk.lowercase()}"
+                            },
+                            color = AIText.copy(alpha = 0.62f),
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        } else {
+            Text(
+                text = "Buscando calles cercanas con menos alertas...",
+                color = AIText.copy(alpha = 0.62f),
+                fontSize = 12.sp
+            )
+        }
+
+        if (routes.isNotEmpty()) {
+            Text(
+                text = "Si necesitas llegar a esa zona",
+                color = AIText,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            routes.forEachIndexed { index, route ->
+                AssistChip(
+                    onClick = { onSelectRoute(index) },
+                    label = {
+                        Text(
+                            text = "Ruta ${index + 1}: ${route.summaryText} · expone a ${route.nearbyReports} reporte(s)"
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (index == selectedRouteIndex) {
+                                Icons.Outlined.Shield
+                            } else {
+                                Icons.Outlined.Route
+                            },
+                            contentDescription = null
+                        )
+                    },
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = if (index == selectedRouteIndex) {
+                            AIPrimary.copy(alpha = 0.12f)
+                        } else {
+                            Color.White
+                        },
+                        labelColor = if (index == selectedRouteIndex) AIPrimary else AIText
+                    )
+                )
+            }
+        } else {
+            Text(
+                text = "Calculando rutas alternativas hacia esta zona...",
+                color = AIText.copy(alpha = 0.62f),
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@Composable
 private fun AIRecommendationCard(
-    recommendation: AIRecommendation
+    recommendation: AIRecommendationResult
 ) {
     Card(
         onClick = {},
@@ -429,6 +740,177 @@ private fun AIInformationCard() {
             )
         }
     }
+}
+
+private fun List<UrbanReport>.toAIAlerts(): List<UrbanAlert> {
+    return filter { report ->
+        report.latitude != null && report.longitude != null
+    }.map { report ->
+        UrbanAlert(
+            id = report.id,
+            title = report.type.ifBlank { "Reporte urbano" },
+            category = report.type.ifBlank { "Reporte" },
+            address = report.locationName.ifBlank { "Sin ubicación" },
+            description = report.description,
+            urgency = report.urgency.ifBlank { "Media" },
+            distanceText = "Reporte real",
+            timeText = "Analizado por IA",
+            latitude = report.latitude ?: 0.0,
+            longitude = report.longitude ?: 0.0
+        )
+    }
+}
+
+private fun riskColor(riskLevel: String): Color {
+    return when (riskLevel) {
+        "Alta" -> UrbanColors.HighUrgency
+        "Media" -> UrbanColors.MediumUrgency
+        else -> UrbanColors.Primary
+    }
+}
+
+private fun countReportsNearRoute(
+    route: List<LatLng>,
+    alerts: List<UrbanAlert>,
+    thresholdMeters: Double = 220.0
+): Int {
+    if (route.size < 2) return 0
+
+    return alerts.count { alert ->
+        val point = LatLng(alert.latitude, alert.longitude)
+
+        route.windowed(2).any { segment ->
+            distancePointToSegmentMeters(
+                point = point,
+                start = segment[0],
+                end = segment[1]
+            ) <= thresholdMeters
+        }
+    }
+}
+
+private suspend fun findSaferNearbyStreets(
+    zone: AIRiskZone,
+    alerts: List<UrbanAlert>
+): List<SaferStreetSuggestion> {
+    val center = LatLng(zone.latitude, zone.longitude)
+    val candidatePoints = listOf(
+        offsetCoordinate(center, northMeters = 620.0, eastMeters = 0.0),
+        offsetCoordinate(center, northMeters = -620.0, eastMeters = 0.0),
+        offsetCoordinate(center, northMeters = 0.0, eastMeters = 620.0),
+        offsetCoordinate(center, northMeters = 0.0, eastMeters = -620.0),
+        offsetCoordinate(center, northMeters = 440.0, eastMeters = 440.0),
+        offsetCoordinate(center, northMeters = 440.0, eastMeters = -440.0),
+        offsetCoordinate(center, northMeters = -440.0, eastMeters = 440.0),
+        offsetCoordinate(center, northMeters = -440.0, eastMeters = -440.0)
+    )
+
+    return candidatePoints.map { point ->
+        val nearbyAlerts = alerts.filter { alert ->
+            distanceMeters(
+                a = point,
+                b = LatLng(alert.latitude, alert.longitude)
+            ) <= 360.0
+        }
+
+        val address = MapSearchService.reverseGeocode(point)
+            ?.substringBefore(", México")
+            ?.substringBefore(", Mexico")
+            ?.ifBlank { null }
+            ?: "Calle cercana ${candidatePoints.indexOf(point) + 1}"
+
+        SaferStreetSuggestion(
+            name = address,
+            coordinate = point,
+            nearbyAlertCount = nearbyAlerts.size,
+            highestRisk = highestRiskLevel(nearbyAlerts)
+        )
+    }
+        .distinctBy { it.name.lowercase() }
+        .sortedWith(
+            compareBy<SaferStreetSuggestion> { it.nearbyAlertCount }
+                .thenBy { riskPriority(it.highestRisk) }
+                .thenBy { it.name }
+        )
+        .take(4)
+}
+
+private fun offsetCoordinate(
+    origin: LatLng,
+    northMeters: Double,
+    eastMeters: Double
+): LatLng {
+    val earthRadiusMeters = 6_371_000.0
+    val newLatitude = origin.latitude + Math.toDegrees(northMeters / earthRadiusMeters)
+    val newLongitude = origin.longitude + Math.toDegrees(
+        eastMeters / (earthRadiusMeters * cos(Math.toRadians(origin.latitude)))
+    )
+
+    return LatLng(newLatitude, newLongitude)
+}
+
+private fun highestRiskLevel(alerts: List<UrbanAlert>): String {
+    return alerts.maxByOrNull { riskPriority(it.urgency) }?.urgency ?: "Baja"
+}
+
+private fun riskPriority(riskLevel: String): Int {
+    return when (riskLevel) {
+        "Alta" -> 3
+        "Media" -> 2
+        else -> 1
+    }
+}
+
+private fun distancePointToSegmentMeters(
+    point: LatLng,
+    start: LatLng,
+    end: LatLng
+): Double {
+    val earthRadiusMeters = 6_371_000.0
+    val referenceLatitude = Math.toRadians(point.latitude)
+
+    fun project(coordinate: LatLng): Pair<Double, Double> {
+        val x = Math.toRadians(coordinate.longitude - point.longitude) *
+            cos(referenceLatitude) *
+            earthRadiusMeters
+        val y = Math.toRadians(coordinate.latitude - point.latitude) *
+            earthRadiusMeters
+        return x to y
+    }
+
+    val pointProjected = 0.0 to 0.0
+    val startProjected = project(start)
+    val endProjected = project(end)
+
+    val dx = endProjected.first - startProjected.first
+    val dy = endProjected.second - startProjected.second
+
+    if (dx == 0.0 && dy == 0.0) {
+        return distanceMeters(point, start)
+    }
+
+    val projection = (
+        (pointProjected.first - startProjected.first) * dx +
+            (pointProjected.second - startProjected.second) * dy
+        ) / (dx * dx + dy * dy)
+
+    val clamped = projection.coerceIn(0.0, 1.0)
+    val closestX = startProjected.first + clamped * dx
+    val closestY = startProjected.second + clamped * dy
+
+    return sqrt(closestX.pow(2) + closestY.pow(2))
+}
+
+private fun distanceMeters(a: LatLng, b: LatLng): Double {
+    val earthRadiusMeters = 6_371_000.0
+    val dLat = Math.toRadians(b.latitude - a.latitude)
+    val dLon = Math.toRadians(b.longitude - a.longitude)
+    val lat1 = Math.toRadians(a.latitude)
+    val lat2 = Math.toRadians(b.latitude)
+    val value = sin(dLat / 2).pow(2) +
+        sin(dLon / 2).pow(2) * cos(lat1) * cos(lat2)
+
+    return 2 * earthRadiusMeters * atan2(sqrt(value), sqrt(1 - value))
 }
 
 @Preview(showBackground = true, showSystemUi = true)
