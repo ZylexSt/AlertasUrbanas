@@ -4,6 +4,9 @@ import com.example.alertasurbanas.model.UrbanReport
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 class ReportRepository {
@@ -48,6 +51,30 @@ class ReportRepository {
             }
             .sortedByDescending { report -> report.createdAt }
     }
+
+    fun observeApprovedReports(): Flow<List<UrbanReport>> = callbackFlow {
+        val listener = reportsCollection
+            .whereEqualTo("status", "approved")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+
+                val reports = snapshot
+                    ?.documents
+                    ?.mapNotNull { document ->
+                        document.toObject(UrbanReport::class.java)?.copy(id = document.id)
+                    }
+                    ?.sortedByDescending { report -> report.createdAt }
+                    .orEmpty()
+
+                trySend(reports)
+            }
+
+        awaitClose { listener.remove() }
+    }
+
     suspend fun getMyReports(): List<UrbanReport> {
         val currentUser = auth.currentUser
             ?: throw Exception("Debes iniciar sesion para ver tus reportes")

@@ -22,6 +22,7 @@ data class MapSearchResult(
 
 object MapSearchService {
     private const val DEFAULT_SEARCH_RADIUS_METERS = 20_000
+    private const val DEFAULT_TAP_RADIUS_METERS = 120
 
     suspend fun searchFirstResult(
         query: String,
@@ -38,7 +39,8 @@ object MapSearchService {
         query: String,
         limit: Int = 5,
         proximity: LatLng? = null,
-        radiusMeters: Int = DEFAULT_SEARCH_RADIUS_METERS
+        radiusMeters: Int = DEFAULT_SEARCH_RADIUS_METERS,
+        showDistance: Boolean = true
     ): List<MapSearchResult> = withContext(Dispatchers.IO) {
         try {
             if (query.isBlank() || BuildConfig.GEOAPIFY_API_KEY.isBlank()) {
@@ -74,11 +76,12 @@ object MapSearchService {
 
                 val coordinate = LatLng(latitude, longitude)
                 val distanceKm = proximity?.let { distanceInKm(it, coordinate) }
+                val visibleDistanceKm = if (showDistance) distanceKm else null
 
                 results.add(
                     MapSearchResult(
                         title = buildTitle(item),
-                        subtitle = buildSubtitle(item, distanceKm),
+                        subtitle = buildSubtitle(item, visibleDistanceKm),
                         coordinate = coordinate,
                         distanceKm = distanceKm
                     )
@@ -116,6 +119,87 @@ object MapSearchService {
             }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    suspend fun nearbyPlaceOrAddress(
+        coordinate: LatLng,
+        proximity: LatLng? = null,
+        radiusMeters: Int = DEFAULT_TAP_RADIUS_METERS
+    ): MapSearchResult? = withContext(Dispatchers.IO) {
+        try {
+            if (BuildConfig.GEOAPIFY_API_KEY.isBlank()) return@withContext null
+
+            val categories = URLEncoder.encode(
+                listOf(
+                    "commercial",
+                    "catering",
+                    "education",
+                    "healthcare",
+                    "entertainment",
+                    "tourism",
+                    "leisure",
+                    "service",
+                    "public_transport",
+                    "parking"
+                ).joinToString(","),
+                "UTF-8"
+            )
+
+            val url = URL(
+                "https://api.geoapify.com/v2/places" +
+                    "?categories=$categories" +
+                    "&filter=circle:${coordinate.longitude},${coordinate.latitude},$radiusMeters" +
+                    "&bias=proximity:${coordinate.longitude},${coordinate.latitude}" +
+                    "&limit=1" +
+                    "&lang=es" +
+                    "&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
+            )
+
+            val response = url.openStream().bufferedReader().use { it.readText() }
+            val features = JSONObject(response).optJSONArray("features")
+
+            if (features != null && features.length() > 0) {
+                val feature = features.getJSONObject(0)
+                val properties = feature.optJSONObject("properties") ?: JSONObject()
+                val geometry = feature.optJSONObject("geometry")
+                val coordinates = geometry?.optJSONArray("coordinates")
+                val longitude = coordinates?.optDouble(0, Double.NaN) ?: Double.NaN
+                val latitude = coordinates?.optDouble(1, Double.NaN) ?: Double.NaN
+                val placeCoordinate = if (!latitude.isNaN() && !longitude.isNaN()) {
+                    LatLng(latitude, longitude)
+                } else {
+                    coordinate
+                }
+                val distanceKm = proximity?.let { distanceInKm(it, placeCoordinate) }
+
+                return@withContext MapSearchResult(
+                    title = buildTitle(properties),
+                    subtitle = buildSubtitle(properties, distanceKm),
+                    coordinate = placeCoordinate,
+                    distanceKm = distanceKm
+                )
+            }
+
+            val address = reverseGeocode(coordinate)
+            address?.let {
+                MapSearchResult(
+                    title = "Punto seleccionado",
+                    subtitle = it,
+                    coordinate = coordinate,
+                    distanceKm = proximity?.let { origin -> distanceInKm(origin, coordinate) }
+                )
+            }
+        } catch (_: Exception) {
+            val address = reverseGeocode(coordinate)
+            address?.let {
+                MapSearchResult(
+                    title = "Punto seleccionado",
+                    subtitle = it,
+                    coordinate = coordinate,
+                    distanceKm = proximity?.let { origin -> distanceInKm(origin, coordinate) }
+                )
+            }
         }
     }
 

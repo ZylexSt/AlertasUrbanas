@@ -137,7 +137,7 @@ object MapRouteService {
 
             routes
                 .filter { it.points.size >= 2 }
-                .sortedWith(compareBy<MapRouteResult> { it.nearbyReports }.thenBy { it.durationMinutes })
+                .sortedWith(compareBy<MapRouteResult> { it.durationMinutes }.thenBy { it.distanceKm })
         } catch (_: Exception) {
             emptyList()
         }

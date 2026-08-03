@@ -7,8 +7,6 @@ import com.example.alertasurbanas.data.AIRiskZone
 import com.example.alertasurbanas.data.AlertRepository
 import com.example.alertasurbanas.data.MapDefaults
 import com.example.alertasurbanas.data.MapRiskZone
-import com.example.alertasurbanas.data.MapRouteResult
-import com.example.alertasurbanas.data.MapRouteService
 import com.example.alertasurbanas.data.MapSearchService
 import com.example.alertasurbanas.data.UrbanAlert
 import com.example.alertasurbanas.model.UrbanReport
@@ -92,16 +90,8 @@ fun AIRecommendationsScreen(
             ?: riskSummary.zones.firstOrNull()
     }
 
-    var zoneRoutes by remember {
-        mutableStateOf<List<MapRouteResult>>(emptyList())
-    }
-
     var saferStreets by remember {
         mutableStateOf<List<SaferStreetSuggestion>>(emptyList())
-    }
-
-    var selectedRouteIndex by rememberSaveable {
-        mutableStateOf(0)
     }
 
     LaunchedEffect(reports, selectedPeriod) {
@@ -126,24 +116,7 @@ fun AIRecommendationsScreen(
 
     LaunchedEffect(selectedZone?.id, liveAlerts) {
         val zone = selectedZone ?: return@LaunchedEffect
-        selectedRouteIndex = 0
         saferStreets = emptyList()
-        zoneRoutes = MapRouteService.drivingRoutes(
-            origin = MapDefaults.UtcjLocation,
-            destination = LatLng(zone.latitude, zone.longitude),
-            targetCount = 3
-        ).map { route ->
-            route.withNearbyReports(
-                countReportsNearRoute(
-                    route = route.points,
-                    alerts = liveAlerts
-                )
-            )
-        }.sortedWith(
-            compareBy<MapRouteResult> { it.nearbyReports }
-                .thenBy { it.durationMinutes }
-                .thenBy { it.distanceKm }
-        )
 
         saferStreets = findSaferNearbyStreets(
             zone = zone,
@@ -224,9 +197,6 @@ fun AIRecommendationsScreen(
                     alerts = liveAlerts,
                     selectedZone = selectedZone,
                     saferStreets = saferStreets,
-                    routes = zoneRoutes,
-                    selectedRouteIndex = selectedRouteIndex,
-                    onSelectRoute = { selectedRouteIndex = it },
                     onSelectZone = { zone ->
                         selectedZoneId = zone.id
                     },
@@ -345,9 +315,6 @@ private fun AIRiskMapCard(
     alerts: List<UrbanAlert>,
     selectedZone: AIRiskZone?,
     saferStreets: List<SaferStreetSuggestion>,
-    routes: List<MapRouteResult>,
-    selectedRouteIndex: Int,
-    onSelectRoute: (Int) -> Unit,
     onSelectZone: (AIRiskZone) -> Unit,
     analyzedZones: Int,
     highRiskZones: Int,
@@ -406,14 +373,12 @@ private fun AIRiskMapCard(
                             riskLevel = zone.riskLevel,
                             reportCount = zone.reportCount,
                             radiusMeters = when (zone.riskLevel) {
-                                "Alta" -> 520.0
-                                "Media" -> 420.0
-                                else -> 320.0
-                            } + (zone.reportCount * 35.0)
+                                "Alta" -> 390.0
+                                "Media" -> 320.0
+                                else -> 260.0
+                            } + (zone.reportCount * 28.0)
                         )
                     },
-                    routeLines = routes.map { it.points },
-                    selectedRouteIndex = selectedRouteIndex,
                     onAlertSelected = { alert ->
                         zones.firstOrNull { "ai-zone-${it.id}" == alert.id }?.let(onSelectZone)
                     }
@@ -479,10 +444,7 @@ private fun AIRiskMapCard(
                 Divider(color = UrbanColors.Border.copy(alpha = 0.7f))
                 AISelectedZoneCard(
                     zone = zone,
-                    saferStreets = saferStreets,
-                    routes = routes,
-                    selectedRouteIndex = selectedRouteIndex,
-                    onSelectRoute = onSelectRoute
+                    saferStreets = saferStreets
                 )
             }
         }
@@ -492,10 +454,7 @@ private fun AIRiskMapCard(
 @Composable
 private fun AISelectedZoneCard(
     zone: AIRiskZone,
-    saferStreets: List<SaferStreetSuggestion>,
-    routes: List<MapRouteResult>,
-    selectedRouteIndex: Int,
-    onSelectRoute: (Int) -> Unit
+    saferStreets: List<SaferStreetSuggestion>
 ) {
     Column(
         modifier = Modifier.padding(15.dp),
@@ -600,49 +559,12 @@ private fun AISelectedZoneCard(
             )
         }
 
-        if (routes.isNotEmpty()) {
-            Text(
-                text = "Si necesitas llegar a esa zona",
-                color = AIText,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            routes.forEachIndexed { index, route ->
-                AssistChip(
-                    onClick = { onSelectRoute(index) },
-                    label = {
-                        Text(
-                            text = "Ruta ${index + 1}: ${route.summaryText} · expone a ${route.nearbyReports} reporte(s)"
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (index == selectedRouteIndex) {
-                                Icons.Outlined.Shield
-                            } else {
-                                Icons.Outlined.Route
-                            },
-                            contentDescription = null
-                        )
-                    },
-                    colors = AssistChipDefaults.assistChipColors(
-                        containerColor = if (index == selectedRouteIndex) {
-                            AIPrimary.copy(alpha = 0.12f)
-                        } else {
-                            Color.White
-                        },
-                        labelColor = if (index == selectedRouteIndex) AIPrimary else AIText
-                    )
-                )
-            }
-        } else {
-            Text(
-                text = "Calculando rutas alternativas hacia esta zona...",
-                color = AIText.copy(alpha = 0.62f),
-                fontSize = 12.sp
-            )
-        }
+        Text(
+            text = "Para calcular una ruta segura, usa Planear ruta y elige origen y destino. Ahí sí se comparan recorridos completos contra las alertas activas.",
+            color = AIText.copy(alpha = 0.62f),
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
     }
 }
 
@@ -769,26 +691,6 @@ private fun riskColor(riskLevel: String): Color {
     }
 }
 
-private fun countReportsNearRoute(
-    route: List<LatLng>,
-    alerts: List<UrbanAlert>,
-    thresholdMeters: Double = 220.0
-): Int {
-    if (route.size < 2) return 0
-
-    return alerts.count { alert ->
-        val point = LatLng(alert.latitude, alert.longitude)
-
-        route.windowed(2).any { segment ->
-            distancePointToSegmentMeters(
-                point = point,
-                start = segment[0],
-                end = segment[1]
-            ) <= thresholdMeters
-        }
-    }
-}
-
 private suspend fun findSaferNearbyStreets(
     zone: AIRiskZone,
     alerts: List<UrbanAlert>
@@ -859,46 +761,6 @@ private fun riskPriority(riskLevel: String): Int {
         "Media" -> 2
         else -> 1
     }
-}
-
-private fun distancePointToSegmentMeters(
-    point: LatLng,
-    start: LatLng,
-    end: LatLng
-): Double {
-    val earthRadiusMeters = 6_371_000.0
-    val referenceLatitude = Math.toRadians(point.latitude)
-
-    fun project(coordinate: LatLng): Pair<Double, Double> {
-        val x = Math.toRadians(coordinate.longitude - point.longitude) *
-            cos(referenceLatitude) *
-            earthRadiusMeters
-        val y = Math.toRadians(coordinate.latitude - point.latitude) *
-            earthRadiusMeters
-        return x to y
-    }
-
-    val pointProjected = 0.0 to 0.0
-    val startProjected = project(start)
-    val endProjected = project(end)
-
-    val dx = endProjected.first - startProjected.first
-    val dy = endProjected.second - startProjected.second
-
-    if (dx == 0.0 && dy == 0.0) {
-        return distanceMeters(point, start)
-    }
-
-    val projection = (
-        (pointProjected.first - startProjected.first) * dx +
-            (pointProjected.second - startProjected.second) * dy
-        ) / (dx * dx + dy * dy)
-
-    val clamped = projection.coerceIn(0.0, 1.0)
-    val closestX = startProjected.first + clamped * dx
-    val closestY = startProjected.second + clamped * dy
-
-    return sqrt(closestX.pow(2) + closestY.pow(2))
 }
 
 private fun distanceMeters(a: LatLng, b: LatLng): Double {

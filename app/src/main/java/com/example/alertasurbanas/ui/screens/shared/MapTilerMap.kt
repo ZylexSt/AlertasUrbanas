@@ -4,13 +4,20 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
+import android.content.Context
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ZoomControls
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.alertasurbanas.BuildConfig
+import com.example.alertasurbanas.R
 import com.example.alertasurbanas.data.MapDefaults
 import com.example.alertasurbanas.data.MapRiskZone
 import com.example.alertasurbanas.data.UrbanAlert
@@ -32,6 +39,7 @@ fun MapTilerMap(
     modifier: Modifier = Modifier,
     center: LatLng = MapDefaults.UtcjLocation,
     zoom: Double = 13.0,
+    showNativeControls: Boolean = true,
     alerts: List<UrbanAlert> = emptyList(),
     currentLocation: LatLng? = null,
     routePoints: List<LatLng> = emptyList(),
@@ -39,13 +47,16 @@ fun MapTilerMap(
     riskZones: List<MapRiskZone> = emptyList(),
     selectedRouteIndex: Int = 0,
     onAlertSelected: (UrbanAlert) -> Unit = {},
+    onMapClick: (LatLng) -> Unit = {},
     onCameraIdle: (LatLng) -> Unit = {}
 ) {
     val context = LocalContext.current
     val initialized = remember { booleanArrayOf(false) }
     val cameraIdleListenerAdded = remember { booleanArrayOf(false) }
+    val mapClickListenerAdded = remember { booleanArrayOf(false) }
     val lastAppliedCenter = remember { arrayOf<LatLng?>(null) }
     val lastAppliedZoom = remember { doubleArrayOf(Double.NaN) }
+    val latestOnMapClick = rememberUpdatedState(onMapClick)
     val currentLocationIcon = remember {
         IconFactory.getInstance(context).fromBitmap(createCurrentLocationBitmap())
     }
@@ -75,11 +86,19 @@ fun MapTilerMap(
         modifier = modifier,
         factory = { mapView },
         update = { view ->
+            if (!showNativeControls) {
+                view.post { hideNativeZoomControls(view) }
+            }
+
             view.getMapAsync { map ->
                 val styleUrl =
                     "https://api.maptiler.com/maps/streets-v2/style.json?key=${BuildConfig.MAPTILER_API_KEY}"
 
                 if (!initialized[0]) {
+                    map.uiSettings.isCompassEnabled = showNativeControls
+                    map.uiSettings.isAttributionEnabled = showNativeControls
+                    map.uiSettings.isLogoEnabled = showNativeControls
+
                     map.setStyle(styleUrl) {
                         initialized[0] = true
                         syncMap(
@@ -94,6 +113,7 @@ fun MapTilerMap(
                             selectedRouteIndex = selectedRouteIndex,
                             currentLocationIcon = currentLocationIcon,
                             alertIconFactory = alertIconFactory,
+                            context = context,
                             lastAppliedCenter = lastAppliedCenter,
                             lastAppliedZoom = lastAppliedZoom,
                             onAlertSelected = onAlertSelected
@@ -105,8 +125,20 @@ fun MapTilerMap(
                                 map.cameraPosition.target?.let(onCameraIdle)
                             }
                         }
+
+                        if (!mapClickListenerAdded[0]) {
+                            mapClickListenerAdded[0] = true
+                            map.addOnMapClickListener { point ->
+                                latestOnMapClick.value(point)
+                                true
+                            }
+                        }
                     }
                 } else {
+                    map.uiSettings.isCompassEnabled = showNativeControls
+                    map.uiSettings.isAttributionEnabled = showNativeControls
+                    map.uiSettings.isLogoEnabled = showNativeControls
+
                     syncMap(
                         map = map,
                         center = center,
@@ -119,6 +151,7 @@ fun MapTilerMap(
                         selectedRouteIndex = selectedRouteIndex,
                         currentLocationIcon = currentLocationIcon,
                         alertIconFactory = alertIconFactory,
+                        context = context,
                         lastAppliedCenter = lastAppliedCenter,
                         lastAppliedZoom = lastAppliedZoom,
                         onAlertSelected = onAlertSelected
@@ -127,6 +160,19 @@ fun MapTilerMap(
             }
         }
     )
+}
+
+private fun hideNativeZoomControls(view: View) {
+    if (view is ZoomControls) {
+        view.visibility = View.GONE
+        return
+    }
+
+    if (view is ViewGroup) {
+        for (index in 0 until view.childCount) {
+            hideNativeZoomControls(view.getChildAt(index))
+        }
+    }
 }
 
 private fun syncMap(
@@ -141,6 +187,7 @@ private fun syncMap(
     selectedRouteIndex: Int,
     currentLocationIcon: org.maplibre.android.annotations.Icon,
     alertIconFactory: IconFactory,
+    context: Context,
     lastAppliedCenter: Array<LatLng?>,
     lastAppliedZoom: DoubleArray,
     onAlertSelected: (UrbanAlert) -> Unit
@@ -175,8 +222,12 @@ private fun syncMap(
         if (routePoints.size >= 2) listOf(routePoints) else emptyList()
     }
 
-    routesToDraw.forEachIndexed { index, route ->
-        if (route.size < 2) return@forEachIndexed
+    val orderedRoutes = routesToDraw
+        .mapIndexed { index, route -> index to route }
+        .sortedBy { (index, _) -> if (index == selectedRouteIndex) 1 else 0 }
+
+    orderedRoutes.forEach { (index, route) ->
+        if (route.size < 2) return@forEach
 
         val isSelected = index == selectedRouteIndex
         map.addPolyline(
@@ -197,7 +248,6 @@ private fun syncMap(
         map.addMarker(
             MarkerOptions()
                 .position(location)
-                .title("Tu ubicación")
                 .icon(currentLocationIcon)
         )
     }
@@ -206,14 +256,15 @@ private fun syncMap(
         map.addMarker(
             MarkerOptions()
                 .position(LatLng(alert.latitude, alert.longitude))
-                .title(alert.id)
-                .snippet("${alert.title} · ${alert.urgency}")
-                .icon(alertIconFactory.fromBitmap(createAlertIconBitmap(alert)))
+                .icon(alertIconFactory.fromBitmap(createAlertIconBitmap(context, alert)))
         )
     }
 
     map.setOnMarkerClickListener { marker ->
-        val selected = alerts.firstOrNull { it.id == marker.title }
+        val selected = alerts.firstOrNull { alert ->
+            abs(alert.latitude - marker.position.latitude) < 0.000001 &&
+                abs(alert.longitude - marker.position.longitude) < 0.000001
+        }
         if (selected != null) {
             onAlertSelected(selected)
             true
@@ -245,23 +296,23 @@ private fun createCirclePoints(zone: MapRiskZone, steps: Int = 64): List<LatLng>
 
 private fun riskZoneFillColor(riskLevel: String): Int {
     return when (riskLevel) {
-        "Alta" -> AndroidColor.argb(72, 217, 83, 79)
-        "Media" -> AndroidColor.argb(72, 231, 163, 62)
-        else -> AndroidColor.argb(62, 60, 111, 98)
+        "Alta" -> AndroidColor.argb(112, 217, 83, 79)
+        "Media" -> AndroidColor.argb(104, 231, 163, 62)
+        else -> AndroidColor.argb(92, 60, 111, 98)
     }
 }
 
 private fun riskZoneStrokeColor(riskLevel: String): Int {
     return when (riskLevel) {
-        "Alta" -> AndroidColor.argb(150, 217, 83, 79)
-        "Media" -> AndroidColor.argb(150, 231, 163, 62)
-        else -> AndroidColor.argb(140, 60, 111, 98)
+        "Alta" -> AndroidColor.argb(210, 217, 83, 79)
+        "Media" -> AndroidColor.argb(205, 231, 163, 62)
+        else -> AndroidColor.argb(195, 60, 111, 98)
     }
 }
 
-private fun createAlertIconBitmap(alert: UrbanAlert): Bitmap {
-    val size = 76
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+private fun createAlertIconBitmap(context: Context, alert: UrbanAlert): Bitmap {
+    val size = 84
+    val bitmap = Bitmap.createBitmap(size, 96, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     val category = "${alert.category} ${alert.title}".lowercase()
@@ -271,118 +322,65 @@ private fun createAlertIconBitmap(alert: UrbanAlert): Bitmap {
         else -> AndroidColor.rgb(60, 111, 98)
     }
 
+    val centerX = size / 2f
+    val centerY = 36f
+
+    paint.style = Paint.Style.FILL
+    paint.color = AndroidColor.argb(55, 0, 0, 0)
+    canvas.drawCircle(centerX, centerY + 4f, 32f, paint)
+
     paint.color = AndroidColor.WHITE
-    canvas.drawCircle(size / 2f, size / 2f, 31f, paint)
+    canvas.drawCircle(centerX, centerY, 33f, paint)
 
     paint.color = color
-    canvas.drawCircle(size / 2f, size / 2f, 26f, paint)
+    canvas.drawCircle(centerX, centerY, 28f, paint)
 
-    paint.color = AndroidColor.WHITE
-    paint.strokeWidth = 5f
-    paint.strokeCap = Paint.Cap.ROUND
-    paint.strokeJoin = Paint.Join.ROUND
-    paint.style = Paint.Style.STROKE
-
-    when {
-        category.contains("bache") || category.contains("vía") || category.contains("via") || category.contains("publica") || category.contains("pública") -> {
-            drawConstructionIcon(canvas, paint, size)
-        }
-
-        category.contains("luminaria") || category.contains("ilumin") -> {
-            drawLightbulbIcon(canvas, paint, size)
-        }
-
-        category.contains("residuo") || category.contains("basura") -> {
-            drawTrashIcon(canvas, paint, size)
-        }
-
-        category.contains("tránsito") || category.contains("transito") || category.contains("choque") || category.contains("veh") -> {
-            drawCarIcon(canvas, paint, size)
-        }
-
-        category.contains("incendio") || category.contains("fuego") -> {
-            drawFlameIcon(canvas, paint, size)
-        }
-
-        category.contains("bloque") || category.contains("calle") -> {
-            drawBlockedIcon(canvas, paint, size)
-        }
-
-        else -> {
-            drawWarningIcon(canvas, paint, size)
-        }
+    val pinTip = android.graphics.Path().apply {
+        moveTo(centerX - 13f, centerY + 24f)
+        lineTo(centerX + 13f, centerY + 24f)
+        lineTo(centerX, 82f)
+        close()
     }
+    canvas.drawPath(pinTip, paint)
+
+    drawVectorIcon(
+        context = context,
+        canvas = canvas,
+        resId = iconResourceForCategory(category),
+        left = 25,
+        top = 19,
+        right = 59,
+        bottom = 53
+    )
 
     return bitmap
 }
 
-private fun drawConstructionIcon(canvas: Canvas, paint: Paint, size: Int) {
-    val c = size / 2f
-    canvas.drawLine(c - 15f, c + 14f, c + 15f, c - 16f, paint)
-    canvas.drawLine(c - 13f, c - 14f, c + 16f, c + 15f, paint)
-    canvas.drawLine(c + 7f, c - 18f, c + 18f, c - 18f, paint)
-    canvas.drawLine(c + 18f, c - 18f, c + 18f, c - 7f, paint)
-    canvas.drawLine(c - 18f, c - 8f, c - 8f, c - 18f, paint)
-}
-
-private fun drawLightbulbIcon(canvas: Canvas, paint: Paint, size: Int) {
-    val c = size / 2f
-    canvas.drawCircle(c, c - 7f, 13f, paint)
-    canvas.drawLine(c - 8f, c + 7f, c + 8f, c + 7f, paint)
-    canvas.drawLine(c - 6f, c + 15f, c + 6f, c + 15f, paint)
-    canvas.drawLine(c - 4f, c + 22f, c + 4f, c + 22f, paint)
-}
-
-private fun drawTrashIcon(canvas: Canvas, paint: Paint, size: Int) {
-    val c = size / 2f
-    canvas.drawLine(c - 15f, c - 16f, c + 15f, c - 16f, paint)
-    canvas.drawLine(c - 7f, c - 23f, c + 7f, c - 23f, paint)
-    canvas.drawRoundRect(c - 13f, c - 10f, c + 13f, c + 22f, 4f, 4f, paint)
-    canvas.drawLine(c - 5f, c - 3f, c - 5f, c + 15f, paint)
-    canvas.drawLine(c + 5f, c - 3f, c + 5f, c + 15f, paint)
-}
-
-private fun drawCarIcon(canvas: Canvas, paint: Paint, size: Int) {
-    val c = size / 2f
-    canvas.drawRoundRect(c - 20f, c - 3f, c + 20f, c + 17f, 7f, 7f, paint)
-    canvas.drawLine(c - 11f, c - 3f, c - 5f, c - 15f, paint)
-    canvas.drawLine(c - 5f, c - 15f, c + 9f, c - 15f, paint)
-    canvas.drawLine(c + 9f, c - 15f, c + 16f, c - 3f, paint)
-    canvas.drawCircle(c - 11f, c + 19f, 3.5f, paint)
-    canvas.drawCircle(c + 11f, c + 19f, 3.5f, paint)
-}
-
-private fun drawFlameIcon(canvas: Canvas, paint: Paint, size: Int) {
-    val c = size / 2f
-    val flame = android.graphics.Path().apply {
-        moveTo(c, c + 23f)
-        cubicTo(c - 18f, c + 8f, c - 8f, c - 4f, c - 3f, c - 15f)
-        cubicTo(c + 1f, c - 6f, c + 13f, c - 3f, c + 7f, c - 25f)
-        cubicTo(c + 24f, c - 6f, c + 20f, c + 12f, c, c + 23f)
-        close()
+private fun iconResourceForCategory(category: String): Int {
+    return when {
+        category.contains("bache") || category.contains("vía") || category.contains("via") || category.contains("publica") || category.contains("pública") -> R.drawable.ic_alert_construction
+        category.contains("luminaria") || category.contains("ilumin") -> R.drawable.ic_alert_lightbulb
+        category.contains("residuo") || category.contains("basura") -> R.drawable.ic_alert_delete
+        category.contains("tránsito") || category.contains("transito") || category.contains("choque") || category.contains("veh") -> R.drawable.ic_alert_car
+        category.contains("incendio") || category.contains("fuego") -> R.drawable.ic_alert_fire
+        category.contains("bloque") || category.contains("calle") -> R.drawable.ic_alert_block
+        category.contains("seguridad") || category.contains("riesgo") -> R.drawable.ic_alert_shield
+        else -> R.drawable.ic_alert_warning
     }
-    canvas.drawPath(flame, paint)
 }
 
-private fun drawBlockedIcon(canvas: Canvas, paint: Paint, size: Int) {
-    val c = size / 2f
-    canvas.drawRoundRect(c - 21f, c - 13f, c + 21f, c + 13f, 6f, 6f, paint)
-    canvas.drawLine(c - 13f, c, c + 13f, c, paint)
-}
-
-private fun drawWarningIcon(canvas: Canvas, paint: Paint, size: Int) {
-    val c = size / 2f
-    val triangle = android.graphics.Path().apply {
-        moveTo(c, c - 22f)
-        lineTo(c - 22f, c + 18f)
-        lineTo(c + 22f, c + 18f)
-        close()
-    }
-    canvas.drawPath(triangle, paint)
-    canvas.drawLine(c, c - 6f, c, c + 6f, paint)
-    paint.style = Paint.Style.FILL
-    canvas.drawCircle(c, c + 14f, 2.8f, paint)
-    paint.style = Paint.Style.STROKE
+private fun drawVectorIcon(
+    context: Context,
+    canvas: Canvas,
+    resId: Int,
+    left: Int,
+    top: Int,
+    right: Int,
+    bottom: Int
+) {
+    val drawable = ContextCompat.getDrawable(context, resId) ?: return
+    drawable.setBounds(left, top, right, bottom)
+    drawable.draw(canvas)
 }
 
 private fun createCurrentLocationBitmap(): Bitmap {
