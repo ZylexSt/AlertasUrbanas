@@ -548,12 +548,52 @@ class MainActivity : ComponentActivity() {
                     "Perfil" -> {
                         if (currentUserRole == "admin") {
                             AdminProfileScreen(
+                                profile = currentUserProfile ?: UserProfile(role = "admin"),
+                                isSaving = isProfileSaving,
+                                message = profileMessage,
                                 onNavigate = {
                                     selectedScreen = it
+                                },
+                                onUpdateProfile = { name, email, password ->
+                                    scope.launch {
+                                        try {
+                                            profileMessage = ""
+                                            isProfileSaving = true
+                                            currentUserProfile = authManager.updateCurrentProfile(
+                                                name = name,
+                                                email = email,
+                                                currentPassword = password
+                                            )
+                                            profileMessage = "Perfil actualizado correctamente."
+                                        } catch (e: Exception) {
+                                            profileMessage = e.message ?: "No se pudo actualizar el perfil."
+                                        } finally {
+                                            isProfileSaving = false
+                                        }
+                                    }
+                                },
+                                onChangePassword = { currentPassword, newPassword ->
+                                    scope.launch {
+                                        try {
+                                            profileMessage = ""
+                                            isProfileSaving = true
+                                            authManager.changeCurrentPassword(
+                                                currentPassword = currentPassword,
+                                                newPassword = newPassword
+                                            )
+                                            profileMessage = "Contrasena actualizada correctamente."
+                                        } catch (e: Exception) {
+                                            profileMessage = e.message ?: "No se pudo cambiar la contrasena."
+                                        } finally {
+                                            isProfileSaving = false
+                                        }
+                                    }
                                 },
                                 onLogout = {
                                     authManager.logout()
                                     currentUserRole = "citizen"
+                                    currentUserProfile = null
+                                    profileMessage = ""
                                     selectedScreen = "Bienvenida"
                                 }
                             )
