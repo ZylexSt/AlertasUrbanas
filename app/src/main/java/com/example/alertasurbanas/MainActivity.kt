@@ -78,6 +78,9 @@ class MainActivity : ComponentActivity() {
                 var errorMessage by rememberSaveable { mutableStateOf("") }
                 var isAuthLoading by rememberSaveable { mutableStateOf(false) }
                 var currentUserRole by rememberSaveable { mutableStateOf("citizen") }
+                var currentUserProfile by remember { mutableStateOf<UserProfile?>(null) }
+                var profileMessage by rememberSaveable { mutableStateOf("") }
+                var isProfileSaving by rememberSaveable { mutableStateOf(false) }
 
                 when (selectedScreen) {
                     "Bienvenida" -> WelcomeScreen(
@@ -102,6 +105,7 @@ class MainActivity : ComponentActivity() {
 
                                     val role = authManager.login(email, password)
                                     currentUserRole = role
+                                    currentUserProfile = authManager.getCurrentUserProfile()
 
                                     selectedScreen = if (role == "admin") {
                                         "Administrador"
@@ -138,6 +142,8 @@ class MainActivity : ComponentActivity() {
                                         email = email,
                                         password = password
                                     )
+                                    currentUserRole = "citizen"
+                                    currentUserProfile = authManager.getCurrentUserProfile()
 
                                     selectedScreen = "Inicio"
                                 } catch (e: Exception) {
@@ -553,12 +559,52 @@ class MainActivity : ComponentActivity() {
                             )
                         } else {
                             ProfileScreen(
+                                profile = currentUserProfile ?: UserProfile(),
+                                isSaving = isProfileSaving,
+                                message = profileMessage,
                                 onNavigate = {
                                     selectedScreen = it
+                                },
+                                onUpdateProfile = { name, email, password ->
+                                    scope.launch {
+                                        try {
+                                            profileMessage = ""
+                                            isProfileSaving = true
+                                            currentUserProfile = authManager.updateCurrentProfile(
+                                                name = name,
+                                                email = email,
+                                                currentPassword = password
+                                            )
+                                            profileMessage = "Perfil actualizado correctamente."
+                                        } catch (e: Exception) {
+                                            profileMessage = e.message ?: "No se pudo actualizar el perfil."
+                                        } finally {
+                                            isProfileSaving = false
+                                        }
+                                    }
+                                },
+                                onChangePassword = { currentPassword, newPassword ->
+                                    scope.launch {
+                                        try {
+                                            profileMessage = ""
+                                            isProfileSaving = true
+                                            authManager.changeCurrentPassword(
+                                                currentPassword = currentPassword,
+                                                newPassword = newPassword
+                                            )
+                                            profileMessage = "Contraseña actualizada correctamente."
+                                        } catch (e: Exception) {
+                                            profileMessage = e.message ?: "No se pudo cambiar la contraseña."
+                                        } finally {
+                                            isProfileSaving = false
+                                        }
+                                    }
                                 },
                                 onLogout = {
                                     authManager.logout()
                                     currentUserRole = "citizen"
+                                    currentUserProfile = null
+                                    profileMessage = ""
                                     selectedScreen = "Bienvenida"
                                 }
                             )
@@ -639,6 +685,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         HomeScreen(
+                            userName = currentUserProfile?.name.orEmpty(),
                             reports = allReports,
                             isLoading = isAdminReportsLoading,
                             errorMessage = adminReportsError,

@@ -53,6 +53,7 @@ private data class AlertCategory(
 
 @Composable
 fun HomeScreen(
+    userName: String = "Usuario",
     reports: List<UrbanReport> = emptyList(),
     isLoading: Boolean = false,
     errorMessage: String = "",
@@ -93,7 +94,7 @@ fun HomeScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { Header() }
+            item { Header(userName = userName) }
             item { SearchBar() }
             item { NearbyAlert(report = nearbyReports.firstOrNull(), reference = distanceOrigin) }
 
@@ -194,14 +195,22 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Header() {
+private fun Header(userName: String) {
+    val greetingName = userName
+        .trim()
+        .ifBlank { "Usuario" }
+        .split(" ")
+        .firstOrNull()
+        .orEmpty()
+        .ifBlank { "Usuario" }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "¡Hola, Ana!",
+                text = "¡Hola, $greetingName!",
                 color = TextPrimary,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold

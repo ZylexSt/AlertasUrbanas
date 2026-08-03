@@ -5,6 +5,7 @@ import com.example.alertasurbanas.ui.theme.UrbanColors
 import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -19,9 +20,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.alertasurbanas.UserProfile
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 
 private val ProfileBackground = UrbanColors.Background
@@ -37,12 +41,23 @@ private data class ProfileOption(
 
 @Composable
 fun ProfileScreen(
+    profile: UserProfile = UserProfile(
+        name = "Usuario",
+        email = "usuario@email.com",
+        role = "citizen"
+    ),
+    isSaving: Boolean = false,
+    message: String = "",
     onNavigate: (String) -> Unit = {},
+    onUpdateProfile: (name: String, email: String, currentPassword: String) -> Unit = { _, _, _ -> },
+    onChangePassword: (currentPassword: String, newPassword: String) -> Unit = { _, _ -> },
     onLogout: () -> Unit = {}
 ) {
     var notificationsEnabled by rememberSaveable {
         mutableStateOf(true)
     }
+    var showEditProfileDialog by rememberSaveable { mutableStateOf(false) }
+    var showPasswordDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         containerColor = ProfileBackground,
@@ -75,7 +90,20 @@ fun ProfileScreen(
             }
 
             item {
-                UserProfileCard()
+                UserProfileCard(
+                    profile = profile,
+                    onEdit = { showEditProfileDialog = true }
+                )
+            }
+
+            if (message.isNotBlank()) {
+                item {
+                    Text(
+                        text = message,
+                        color = if (message.contains("correct", ignoreCase = true)) ProfilePrimary else ProfileDanger,
+                        fontSize = 13.sp
+                    )
+                }
             }
 
             item {
@@ -93,7 +121,8 @@ fun ProfileScreen(
                             title = "Privacidad y seguridad",
                             subtitle = "Contraseña y uso de datos",
                             icon = Icons.Outlined.Security
-                        )
+                        ),
+                        onClick = { showPasswordDialog = true }
                     )
                 }
             }
@@ -183,10 +212,34 @@ fun ProfileScreen(
             }
         }
     }
+
+    if (showEditProfileDialog) {
+        EditProfileDialog(
+            profile = profile,
+            isSaving = isSaving,
+            onDismiss = { showEditProfileDialog = false },
+            onSave = { name, email, password ->
+                onUpdateProfile(name, email, password)
+            }
+        )
+    }
+
+    if (showPasswordDialog) {
+        ChangePasswordDialog(
+            isSaving = isSaving,
+            onDismiss = { showPasswordDialog = false },
+            onSave = { currentPassword, newPassword ->
+                onChangePassword(currentPassword, newPassword)
+            }
+        )
+    }
 }
 
 @Composable
-private fun UserProfileCard() {
+private fun UserProfileCard(
+    profile: UserProfile,
+    onEdit: () -> Unit
+) {
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
@@ -207,7 +260,7 @@ private fun UserProfileCard() {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = "AM",
+                        text = profile.initials,
                         color = Color.White,
                         fontSize = 25.sp,
                         fontWeight = FontWeight.Bold
@@ -219,14 +272,14 @@ private fun UserProfileCard() {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Ana Martínez",
+                    text = profile.name.ifBlank { "Usuario" },
                     color = ProfileText,
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold
                 )
 
                 Text(
-                    text = "ana@email.com",
+                    text = profile.email.ifBlank { "Sin correo" },
                     color = ProfileText.copy(alpha = 0.62f),
                     fontSize = 13.sp
                 )
@@ -238,7 +291,7 @@ private fun UserProfileCard() {
                     color = ProfilePrimary.copy(alpha = 0.11f)
                 ) {
                     Text(
-                        text = "Ciudadana",
+                        text = profile.roleLabel,
                         modifier = Modifier.padding(
                             horizontal = 10.dp,
                             vertical = 5.dp
@@ -250,11 +303,13 @@ private fun UserProfileCard() {
                 }
             }
 
-            Icon(
-                imageVector = Icons.Outlined.Edit,
-                contentDescription = "Editar",
-                tint = ProfileText.copy(alpha = 0.55f)
-            )
+            IconButton(onClick = onEdit) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = "Editar",
+                    tint = ProfileText.copy(alpha = 0.55f)
+                )
+            }
         }
     }
 }
@@ -348,10 +403,14 @@ private fun ProfileMenuCard(
 
 @Composable
 private fun ProfileMenuOption(
-    option: ProfileOption
+    option: ProfileOption,
+    onClick: () -> Unit = {}
 ) {
     Row(
-        modifier = Modifier.padding(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(14.dp)
+            .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
         MenuIcon(option.icon)
@@ -378,6 +437,166 @@ private fun ProfileMenuOption(
             tint = ProfileText.copy(alpha = 0.5f)
         )
     }
+}
+
+@Composable
+private fun EditProfileDialog(
+    profile: UserProfile,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, email: String, currentPassword: String) -> Unit
+) {
+    var name by rememberSaveable(profile.name) { mutableStateOf(profile.name) }
+    var email by rememberSaveable(profile.email) { mutableStateOf(profile.email) }
+    var password by rememberSaveable { mutableStateOf("") }
+    var showPassword by rememberSaveable { mutableStateOf(false) }
+    val emailChanged = !email.trim().equals(profile.email.trim(), ignoreCase = true)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar perfil", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nombre") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("Correo") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (emailChanged) {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Contraseña actual") },
+                        singleLine = true,
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(
+                                    imageVector = if (showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = "Para cambiar el correo necesitamos confirmar tu contraseña.",
+                        color = ProfileText.copy(alpha = 0.62f),
+                        fontSize = 12.sp
+                    )
+                }
+
+                Text(
+                    text = "Rol: ${profile.roleLabel}",
+                    color = ProfilePrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(name, email, password) },
+                enabled = !isSaving,
+                colors = ButtonDefaults.buttonColors(containerColor = ProfilePrimary)
+            ) {
+                Text(if (isSaving) "Guardando..." else "Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ChangePasswordDialog(
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (currentPassword: String, newPassword: String) -> Unit
+) {
+    var currentPassword by rememberSaveable { mutableStateOf("") }
+    var newPassword by rememberSaveable { mutableStateOf("") }
+    var showCurrentPassword by rememberSaveable { mutableStateOf(false) }
+    var showNewPassword by rememberSaveable { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cambiar contraseña", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                PasswordField(
+                    value = currentPassword,
+                    onValueChange = { currentPassword = it },
+                    label = "Contraseña actual",
+                    visible = showCurrentPassword,
+                    onToggleVisible = { showCurrentPassword = !showCurrentPassword }
+                )
+
+                PasswordField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    label = "Nueva contraseña",
+                    visible = showNewPassword,
+                    onToggleVisible = { showNewPassword = !showNewPassword }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(currentPassword, newPassword) },
+                enabled = !isSaving,
+                colors = ButtonDefaults.buttonColors(containerColor = ProfilePrimary)
+            ) {
+                Text(if (isSaving) "Actualizando..." else "Actualizar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isSaving) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+private fun PasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    visible: Boolean,
+    onToggleVisible: () -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = onToggleVisible) {
+                Icon(
+                    imageVector = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = null
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable

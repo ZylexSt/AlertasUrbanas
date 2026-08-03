@@ -1,8 +1,37 @@
 package com.example.alertasurbanas
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+
+data class UserProfile(
+    val uid: String = "",
+    val name: String = "",
+    val email: String = "",
+    val role: String = "citizen"
+) {
+    val roleLabel: String
+        get() = if (role == "admin") "Administrador" else "Ciudadana"
+
+    val initials: String
+        get() {
+            val source = name.ifBlank { email }.trim()
+            if (source.isBlank()) return "AU"
+
+            val parts = source
+                .replace("@.*".toRegex(), "")
+                .split(" ", ".", "_", "-")
+                .filter { it.isNotBlank() }
+
+            return parts
+                .take(2)
+                .map { it.first().uppercaseChar() }
+                .joinToString("")
+                .ifBlank { "AU" }
+        }
+}
 
 class AuthManager {
     private val auth = FirebaseAuth.getInstance()
@@ -23,6 +52,21 @@ class AuthManager {
         return userDoc.getString("role") ?: "citizen"
     }
 
+    suspend fun getCurrentUserProfile(): UserProfile {
+        val user = auth.currentUser ?: throw Exception("No hay usuario activo")
+        val userDoc = db.collection("users")
+            .document(user.uid)
+            .get()
+            .await()
+
+        return UserProfile(
+            uid = user.uid,
+            name = userDoc.getString("name") ?: user.displayName.orEmpty(),
+            email = userDoc.getString("email") ?: user.email.orEmpty(),
+            role = userDoc.getString("role") ?: "citizen"
+        )
+    }
+
     suspend fun registerCitizen(
         name: String,
         email: String,
@@ -41,6 +85,79 @@ class AuthManager {
             .document(uid)
             .set(userData)
             .await()
+
+        result.user?.updateProfile(
+            UserProfileChangeRequest.Builder()
+                .setDisplayName(name)
+                .build()
+        )?.await()
+    }
+
+    suspend fun updateCurrentProfile(
+        name: String,
+        email: String,
+        currentPassword: String
+    ): UserProfile {
+        val user = auth.currentUser ?: throw Exception("No hay usuario activo")
+        val cleanName = name.trim()
+        val cleanEmail = email.trim()
+        val currentEmail = user.email.orEmpty()
+
+        if (cleanName.isBlank()) {
+            throw Exception("El nombre no puede estar vacío")
+        }
+
+        if (cleanEmail.isBlank()) {
+            throw Exception("El correo no puede estar vacío")
+        }
+
+        if (!cleanEmail.equals(currentEmail, ignoreCase = true)) {
+            if (currentPassword.isBlank()) {
+                throw Exception("Para cambiar el correo debes escribir tu contraseña actual")
+            }
+
+            val credential = EmailAuthProvider.getCredential(currentEmail, currentPassword)
+            user.reauthenticate(credential).await()
+            user.updateEmail(cleanEmail).await()
+        }
+
+        user.updateProfile(
+            UserProfileChangeRequest.Builder()
+                .setDisplayName(cleanName)
+                .build()
+        ).await()
+
+        db.collection("users")
+            .document(user.uid)
+            .update(
+                mapOf(
+                    "name" to cleanName,
+                    "email" to cleanEmail
+                )
+            )
+            .await()
+
+        return getCurrentUserProfile()
+    }
+
+    suspend fun changeCurrentPassword(
+        currentPassword: String,
+        newPassword: String
+    ) {
+        val user = auth.currentUser ?: throw Exception("No hay usuario activo")
+        val currentEmail = user.email ?: throw Exception("No se encontró el correo del usuario")
+
+        if (currentPassword.isBlank()) {
+            throw Exception("Escribe tu contraseña actual")
+        }
+
+        if (newPassword.length < 6) {
+            throw Exception("La nueva contraseña debe tener al menos 6 caracteres")
+        }
+
+        val credential = EmailAuthProvider.getCredential(currentEmail, currentPassword)
+        user.reauthenticate(credential).await()
+        user.updatePassword(newPassword).await()
     }
 
     fun logout() {
