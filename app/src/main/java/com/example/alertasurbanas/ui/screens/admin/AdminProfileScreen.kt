@@ -78,6 +78,7 @@ fun AdminProfileScreen(
     ),
     isSaving: Boolean = false,
     message: String = "",
+    unreadNotificationsCount: Int = 0,
     onNavigate: (String) -> Unit = {},
     onUpdateProfile: (name: String, email: String, currentPassword: String) -> Unit = { _, _, _ -> },
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit = { _, _ -> },
@@ -155,10 +156,14 @@ fun AdminProfileScreen(
 
                     HorizontalDivider(color = UrbanColors.Border)
 
-                    AdminProfileItem(
-                        icon = Icons.Outlined.Notifications,
-                        title = "Notificaciones",
-                        subtitle = "Avisos de reportes pendientes"
+                    AdminProfileMenuItem(
+                        option = AdminProfileOption(
+                            icon = Icons.Outlined.Notifications,
+                            title = "Notificaciones",
+                            subtitle = "Avisos de reportes pendientes"
+                        ),
+                        badgeCount = unreadNotificationsCount,
+                        onClick = { onNavigate("Notificaciones") }
                     )
                 }
             }
@@ -372,6 +377,7 @@ private fun AdminProfileItem(
 @Composable
 private fun AdminProfileMenuItem(
     option: AdminProfileOption,
+    badgeCount: Int = 0,
     onClick: () -> Unit
 ) {
     Row(
@@ -399,11 +405,31 @@ private fun AdminProfileMenuItem(
                 fontSize = 13.sp
             )
         }
+        if (badgeCount > 0) {
+            AdminNotificationBadge(count = badgeCount)
+            Spacer(modifier = Modifier.width(8.dp))
+        }
 
         Icon(
             imageVector = Icons.Outlined.ChevronRight,
             contentDescription = null,
             tint = UrbanColors.TextSecondary
+        )
+    }
+}
+
+@Composable
+private fun AdminNotificationBadge(count: Int) {
+    Surface(
+        shape = CircleShape,
+        color = UrbanColors.HighUrgency
+    ) {
+        Text(
+            text = if (count > 9) "9+" else count.toString(),
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
     }
 }

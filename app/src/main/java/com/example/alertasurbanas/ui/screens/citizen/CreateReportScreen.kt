@@ -1,4 +1,4 @@
-﻿package com.example.alertasurbanas.ui.screens.citizen
+package com.example.alertasurbanas.ui.screens.citizen
 
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
@@ -70,6 +70,7 @@ fun CreateReportScreen(
         ReportType("Luminaria", Icons.Outlined.Lightbulb),
         ReportType("Residuos", Icons.Outlined.Delete),
         ReportType("Tránsito", Icons.Outlined.DirectionsCar),
+        ReportType("Calle bloqueada", Icons.Outlined.Traffic),
         ReportType("Otro", Icons.Outlined.MoreHoriz)
     )
 

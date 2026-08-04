@@ -1,9 +1,10 @@
-﻿package com.example.alertasurbanas.ui.screens.citizen
+package com.example.alertasurbanas.ui.screens.citizen
 
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -121,28 +123,42 @@ fun MyReportsScreen(
             }
 
             item {
-                ReportsSummary(reports = reports)
+                ReportsSummary(
+                    reports = reports,
+                    selectedFilter = selectedFilter,
+                    onFilterSelected = { selectedFilter = it }
+                )
             }
 
             item {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(9.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(
-                        listOf(
-                            "Todos",
-                            "Pendiente",
-                            "Validado",
-                            "Rechazado"
-                        )
-                    ) { filter ->
+                    listOf(
+                        "Todos",
+                        "Pendiente",
+                        "Validado",
+                        "Rechazado"
+                    ).forEach { filter ->
                         FilterChip(
                             selected = selectedFilter == filter,
                             onClick = {
                                 selectedFilter = filter
                             },
+                            modifier = Modifier.weight(1f),
                             label = {
-                                Text(filter)
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = filter,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = ReportsPrimary,
@@ -236,107 +252,101 @@ private fun ReportsHeader() {
             )
         }
 
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = Color.White,
-            shadowElevation = 2.dp
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Tune,
-                contentDescription = "Filtros",
-                tint = ReportsText,
-                modifier = Modifier.padding(12.dp)
-            )
-        }
     }
 }
 
 @Composable
-private fun ReportsSummary(reports: List<UrbanReport>) {
+private fun ReportsSummary(
+    reports: List<UrbanReport>,
+    selectedFilter: String,
+    onFilterSelected: (String) -> Unit
+) {
     val totalCount = reports.size
     val pendingCount = reports.count { it.status == "pending" }
     val approvedCount = reports.count { it.status == "approved" }
     val rejectedCount = reports.count { it.status == "rejected" }
 
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item {
-            SummaryCard(
-                number = totalCount.toString(),
-                label = "Total",
-                color = ReportsPrimary,
-                modifier = Modifier.width(96.dp)
-            )
-        }
+        SummaryCard(
+            number = totalCount.toString(),
+            label = "Total",
+            color = ReportsPrimary,
+            selected = selectedFilter == "Todos",
+            onClick = { onFilterSelected("Todos") },
+            modifier = Modifier.weight(1f)
+        )
 
-        item {
-            SummaryCard(
-                number = pendingCount.toString(),
-                label = "Pendiente",
-                color = PendingColor,
-                modifier = Modifier.width(96.dp)
-            )
-        }
+        SummaryCard(
+            number = pendingCount.toString(),
+            label = "Pendiente",
+            color = PendingColor,
+            selected = selectedFilter == "Pendiente",
+            onClick = { onFilterSelected("Pendiente") },
+            modifier = Modifier.weight(1f)
+        )
 
-        item {
-            SummaryCard(
-                number = approvedCount.toString(),
-                label = "Validado",
-                color = ApprovedColor,
-                modifier = Modifier.width(96.dp)
-            )
-        }
+        SummaryCard(
+            number = approvedCount.toString(),
+            label = "Validado",
+            color = ApprovedColor,
+            selected = selectedFilter == "Validado",
+            onClick = { onFilterSelected("Validado") },
+            modifier = Modifier.weight(1f)
+        )
 
-        item {
-            SummaryCard(
-                number = rejectedCount.toString(),
-                label = "Rechazado",
-                color = RejectedColor,
-                modifier = Modifier.width(96.dp)
-            )
-        }
+        SummaryCard(
+            number = rejectedCount.toString(),
+            label = "Rechazado",
+            color = RejectedColor,
+            selected = selectedFilter == "Rechazado",
+            onClick = { onFilterSelected("Rechazado") },
+            modifier = Modifier.weight(1f)
+        )
     }
 }
-
 @Composable
 private fun SummaryCard(
     number: String,
     label: String,
     color: Color,
+    selected: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
+        onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = color.copy(alpha = 0.11f)
-        )
+            containerColor = color.copy(alpha = if (selected) 0.18f else 0.11f)
+        ),
+        border = if (selected) BorderStroke(1.dp, color) else null
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 14.dp),
+                .padding(vertical = 12.dp, horizontal = 2.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = number,
                 color = color,
-                fontSize = 22.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
                 text = label,
                 color = ReportsText.copy(alpha = 0.7f),
-                fontSize = 11.sp
+                fontSize = 11.sp,
+                maxLines = 1
             )
-
-
         }
     }
 }
-
 @Composable
 private fun UserReportCard(
     report: UserReport,
@@ -501,6 +511,7 @@ private fun reportIcon(type: String): ImageVector {
         "Luminaria" -> Icons.Outlined.Lightbulb
         "Residuos" -> Icons.Outlined.Delete
         "Tránsito" -> Icons.Outlined.DirectionsCar
+        "Calle bloqueada" -> Icons.Outlined.Traffic
         else -> Icons.Outlined.ReportProblem
     }
 }

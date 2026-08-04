@@ -48,14 +48,12 @@ fun ProfileScreen(
     ),
     isSaving: Boolean = false,
     message: String = "",
+    unreadNotificationsCount: Int = 0,
     onNavigate: (String) -> Unit = {},
     onUpdateProfile: (name: String, email: String, currentPassword: String) -> Unit = { _, _, _ -> },
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit = { _, _ -> },
     onLogout: () -> Unit = {}
 ) {
-    var notificationsEnabled by rememberSaveable {
-        mutableStateOf(true)
-    }
     var showEditProfileDialog by rememberSaveable { mutableStateOf(false) }
     var showPasswordDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -133,39 +131,15 @@ fun ProfileScreen(
 
             item {
                 ProfileMenuCard {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        MenuIcon(Icons.Outlined.Notifications)
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Notificaciones",
-                                color = ProfileText,
-                                fontWeight = FontWeight.SemiBold
-                            )
-
-                            Text(
-                                text = "Alertas cercanas y actualizaciones",
-                                color = ProfileText.copy(alpha = 0.58f),
-                                fontSize = 11.sp
-                            )
-                        }
-
-                        Switch(
-                            checked = notificationsEnabled,
-                            onCheckedChange = {
-                                notificationsEnabled = it
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = ProfilePrimary
-                            )
-                        )
-                    }
+                    ProfileMenuOption(
+                        option = ProfileOption(
+                            title = "Notificaciones",
+                            subtitle = "Alertas cercanas y actualizaciones",
+                            icon = Icons.Outlined.Notifications
+                        ),
+                        badgeCount = unreadNotificationsCount,
+                        onClick = { onNavigate("Notificaciones") }
+                    )
 
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 62.dp),
@@ -404,6 +378,7 @@ private fun ProfileMenuCard(
 @Composable
 private fun ProfileMenuOption(
     option: ProfileOption,
+    badgeCount: Int = 0,
     onClick: () -> Unit = {}
 ) {
     Row(
@@ -431,6 +406,11 @@ private fun ProfileMenuOption(
             )
         }
 
+        if (badgeCount > 0) {
+            NotificationBadge(count = badgeCount)
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
         Icon(
             imageVector = Icons.Outlined.ChevronRight,
             contentDescription = null,
@@ -439,6 +419,22 @@ private fun ProfileMenuOption(
     }
 }
 
+
+@Composable
+private fun NotificationBadge(count: Int) {
+    Surface(
+        shape = CircleShape,
+        color = UrbanColors.HighUrgency
+    ) {
+        Text(
+            text = if (count > 9) "9+" else count.toString(),
+            color = Color.White,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
+    }
+}
 @Composable
 private fun EditProfileDialog(
     profile: UserProfile,

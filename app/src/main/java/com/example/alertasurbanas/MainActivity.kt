@@ -27,10 +27,13 @@ import com.example.alertasurbanas.ui.screens.auth.WelcomeScreen
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import kotlinx.coroutines.launch
 import com.example.alertasurbanas.ui.screens.admin.AdminProfileScreen
+import com.example.alertasurbanas.data.NotificationRepository
 import com.example.alertasurbanas.data.ReportRepository
 import com.example.alertasurbanas.data.UrbanAlert
+import com.example.alertasurbanas.model.AppNotification
 import com.example.alertasurbanas.model.UrbanReport
 import androidx.compose.runtime.LaunchedEffect
+import com.example.alertasurbanas.ui.screens.shared.NotificationsScreen
 
 
 
@@ -49,6 +52,7 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
 
                 val reportRepository = remember { ReportRepository() }
+                val notificationRepository = remember { NotificationRepository() }
                 var reportErrorMessage by rememberSaveable { mutableStateOf("") }
                 var isReportLoading by rememberSaveable { mutableStateOf(false) }
                 var reportType by rememberSaveable { mutableStateOf("Bache") }
@@ -74,6 +78,7 @@ class MainActivity : ComponentActivity() {
                 var editingReportId by rememberSaveable { mutableStateOf("") }
                 var locationReturnScreen by rememberSaveable { mutableStateOf("Reportar") }
                 var publicDetailBackScreen by rememberSaveable { mutableStateOf("Inicio") }
+                var notificationsBackScreen by rememberSaveable { mutableStateOf("Inicio") }
 
                 var errorMessage by rememberSaveable { mutableStateOf("") }
                 var isAuthLoading by rememberSaveable { mutableStateOf(false) }
@@ -81,6 +86,10 @@ class MainActivity : ComponentActivity() {
                 var currentUserProfile by remember { mutableStateOf<UserProfile?>(null) }
                 var profileMessage by rememberSaveable { mutableStateOf("") }
                 var isProfileSaving by rememberSaveable { mutableStateOf(false) }
+                var notifications by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
+                var notificationsError by rememberSaveable { mutableStateOf("") }
+                var isNotificationsLoading by rememberSaveable { mutableStateOf(false) }
+                var unreadNotificationsCount by rememberSaveable { mutableStateOf(0) }
 
                 when (selectedScreen) {
                     "Bienvenida" -> WelcomeScreen(
@@ -260,6 +269,16 @@ class MainActivity : ComponentActivity() {
                                             status = "approved"
                                         )
 
+                                        try {
+                                            notificationRepository.createReportStatusNotification(
+                                                recipientId = reportToReview.userId,
+                                                reportId = reportToReview.id,
+                                                reportType = reportToReview.type,
+                                                status = "approved"
+                                            )
+                                        } catch (_: Exception) {
+                                        }
+
                                         val updatedReport = reportToReview.copy(status = "approved", rejectionReason = "")
                                         selectedReport = updatedReport
                                         allReports = allReports.map { report ->
@@ -286,6 +305,17 @@ class MainActivity : ComponentActivity() {
                                             reportId = reportToReview.id,
                                             reason = rejectionReason
                                         )
+
+                                        try {
+                                            notificationRepository.createReportStatusNotification(
+                                                recipientId = reportToReview.userId,
+                                                reportId = reportToReview.id,
+                                                reportType = reportToReview.type,
+                                                status = "rejected",
+                                                rejectionReason = rejectionReason
+                                            )
+                                        } catch (_: Exception) {
+                                        }
 
                                         val updatedReport = reportToReview.copy(
                                             status = "rejected",
@@ -346,18 +376,27 @@ class MainActivity : ComponentActivity() {
                                     reportErrorMessage = ""
                                     isReportLoading = true
 
-                                    reportRepository.createReport(
+                                    val createdReportId = reportRepository.createReport(
                                         UrbanReport(
                                             type = type,
                                             description = description,
                                             urgency = urgency,
                                             locationName = locationName,
                                             latitude = reportLatitude,
-                                        longitude = reportLongitude,
-                                        status = "pending",
-                                        rejectionReason = ""
+                                            longitude = reportLongitude,
+                                            status = "pending",
+                                            rejectionReason = ""
+                                        )
                                     )
-                                    )
+
+                                    try {
+                                        notificationRepository.createReportSubmittedNotification(
+                                            reportId = createdReportId,
+                                            reportType = type,
+                                            userName = currentUserProfile?.name.orEmpty()
+                                        )
+                                    } catch (_: Exception) {
+                                    }
 
                                     reportType = "Bache"
                                     reportUrgency = "Media"
@@ -545,13 +584,61 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
+                    "Notificaciones" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                notificationsError = ""
+                                isNotificationsLoading = true
+                                notifications = notificationRepository.getMyNotifications(currentUserRole)
+                                unreadNotificationsCount = notifications.count { !it.read }
+                            } catch (e: Exception) {
+                                notificationsError = e.message ?: "No se pudieron cargar tus notificaciones."
+                            } finally {
+                                isNotificationsLoading = false
+                            }
+                        }
+
+                        NotificationsScreen(
+                            notifications = notifications,
+                            isLoading = isNotificationsLoading,
+                            errorMessage = notificationsError,
+                            onBack = {
+                                selectedScreen = notificationsBackScreen
+                            },
+                            onMarkAsRead = { notification ->
+                                scope.launch {
+                                    try {
+                                        notificationRepository.markAsRead(notification.id)
+                                        notifications = notifications.map {
+                                            if (it.id == notification.id) it.copy(read = true) else it
+                                        }
+                                        unreadNotificationsCount = notifications.count { !it.read }
+                                    } catch (e: Exception) {
+                                        notificationsError = e.message ?: "No se pudo actualizar la notificacion."
+                                    }
+                                }
+                            }
+                        )
+                    }
                     "Perfil" -> {
+                        LaunchedEffect(currentUserRole) {
+                            try {
+                                val loadedNotifications = notificationRepository.getMyNotifications(currentUserRole)
+                                unreadNotificationsCount = loadedNotifications.count { !it.read }
+                            } catch (_: Exception) {
+                            }
+                        }
+
                         if (currentUserRole == "admin") {
                             AdminProfileScreen(
                                 profile = currentUserProfile ?: UserProfile(role = "admin"),
                                 isSaving = isProfileSaving,
                                 message = profileMessage,
+                                unreadNotificationsCount = unreadNotificationsCount,
                                 onNavigate = {
+                                    if (it == "Notificaciones") {
+                                        notificationsBackScreen = "Perfil"
+                                    }
                                     selectedScreen = it
                                 },
                                 onUpdateProfile = { name, email, password ->
@@ -602,7 +689,11 @@ class MainActivity : ComponentActivity() {
                                 profile = currentUserProfile ?: UserProfile(),
                                 isSaving = isProfileSaving,
                                 message = profileMessage,
+                                unreadNotificationsCount = unreadNotificationsCount,
                                 onNavigate = {
+                                    if (it == "Notificaciones") {
+                                        notificationsBackScreen = "Perfil"
+                                    }
                                     selectedScreen = it
                                 },
                                 onUpdateProfile = { name, email, password ->
@@ -644,6 +735,7 @@ class MainActivity : ComponentActivity() {
                                     authManager.logout()
                                     currentUserRole = "citizen"
                                     currentUserProfile = null
+                                    unreadNotificationsCount = 0
                                     profileMessage = ""
                                     selectedScreen = "Bienvenida"
                                 }
@@ -729,9 +821,14 @@ class MainActivity : ComponentActivity() {
                             reports = allReports,
                             isLoading = isAdminReportsLoading,
                             errorMessage = adminReportsError,
+                            unreadNotificationsCount = unreadNotificationsCount,
                             onOpenReport = { report ->
                                 selectedReport = report
                                 selectedScreen = "DetallePublico"
+                            },
+                            onOpenNotifications = {
+                                notificationsBackScreen = "Inicio"
+                                selectedScreen = "Notificaciones"
                             },
                             onNavigate = { selectedScreen = it }
                         )

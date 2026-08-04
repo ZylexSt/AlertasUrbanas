@@ -16,11 +16,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -57,20 +62,27 @@ fun HomeScreen(
     reports: List<UrbanReport> = emptyList(),
     isLoading: Boolean = false,
     errorMessage: String = "",
+    unreadNotificationsCount: Int = 0,
     onOpenReport: (UrbanReport) -> Unit = {},
+    onOpenNotifications: () -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
     val categories = listOf(
         AlertCategory("Todas", Icons.Outlined.GridView),
-        AlertCategory("Tránsito", Icons.Outlined.DirectionsCar),
         AlertCategory("Vía pública", Icons.Outlined.Construction),
+        AlertCategory("Calle bloqueada", Icons.Outlined.Traffic),
         AlertCategory("Iluminación", Icons.Outlined.Lightbulb),
-        AlertCategory("Seguridad", Icons.Outlined.Shield)
+        AlertCategory("Residuos", Icons.Outlined.Delete),
+        AlertCategory("Tránsito", Icons.Outlined.DirectionsCar)
     )
+    var selectedCategory by rememberSaveable { mutableStateOf("Todas") }
+
+
 
         val distanceOrigin = MapDefaults.UtcjLocation
     val nearbyReports = reports
         .filter { it.latitude != null && it.longitude != null }
+        .filter { report -> matchesHomeCategory(report, selectedCategory) }
         .sortedBy { report ->
             haversineMeters(distanceOrigin, LatLng(report.latitude ?: 0.0, report.longitude ?: 0.0))
         }
@@ -94,7 +106,7 @@ fun HomeScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { Header(userName = userName) }
+            item { Header(userName = userName, unreadNotificationsCount = unreadNotificationsCount, onOpenNotifications = onOpenNotifications) }
             item { SearchBar() }
             item { NearbyAlert(report = nearbyReports.firstOrNull(), reference = distanceOrigin) }
 
@@ -122,7 +134,8 @@ fun HomeScreen(
                     items(categories) { category ->
                         CategoryCard(
                             category = category,
-                            selected = category.name == "Todas"
+                            selected = category.name == selectedCategory,
+                            onClick = { selectedCategory = category.name }
                         )
                     }
                 }
@@ -195,7 +208,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun Header(userName: String) {
+private fun Header(userName: String, unreadNotificationsCount: Int, onOpenNotifications: () -> Unit) {
     val greetingName = userName
         .trim()
         .ifBlank { "Usuario" }
@@ -223,17 +236,39 @@ private fun Header(userName: String) {
             )
         }
 
-        Surface(
-            shape = CircleShape,
-            color = Color.White,
-            shadowElevation = 2.dp
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.NotificationsNone,
-                contentDescription = "Notificaciones",
-                tint = TextPrimary,
-                modifier = Modifier.padding(11.dp)
-            )
+        Box {
+            Surface(
+                onClick = onOpenNotifications,
+                shape = CircleShape,
+                color = Color.White,
+                shadowElevation = 2.dp
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.NotificationsNone,
+                    contentDescription = "Notificaciones",
+                    tint = TextPrimary,
+                    modifier = Modifier.padding(11.dp)
+                )
+            }
+
+            if (unreadNotificationsCount > 0) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(16.dp),
+                    shape = CircleShape,
+                    color = HighUrgency
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (unreadNotificationsCount > 9) "9+" else unreadNotificationsCount.toString(),
+                            color = Color.White,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -327,13 +362,15 @@ private fun NearbyAlert(
 @Composable
 private fun CategoryCard(
     category: AlertCategory,
-    selected: Boolean
+    selected: Boolean,
+    onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier.width(82.dp),
+        modifier = Modifier.width(96.dp),
         shape = RoundedCornerShape(16.dp),
         color = if (selected) Primary else Color.White,
-        shadowElevation = if (selected) 0.dp else 2.dp
+        shadowElevation = if (selected) 0.dp else 2.dp,
+        onClick = onClick
     ) {
         Column(
             modifier = Modifier.padding(vertical = 13.dp),
@@ -351,7 +388,9 @@ private fun CategoryCard(
                 text = category.name,
                 color = if (selected) Color.White else TextPrimary,
                 fontSize = 11.sp,
-                maxLines = 1
+                lineHeight = 13.sp,
+                maxLines = 2,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -559,6 +598,18 @@ private fun navigationColors() = NavigationBarItemDefaults.colors(
 )
 
 
+private fun matchesHomeCategory(report: UrbanReport, category: String): Boolean {
+    val normalizedType = report.type.lowercase()
+    return when (category) {
+        "Todas" -> true
+        "Vía pública" -> normalizedType.contains("bache") || normalizedType.contains("via") || normalizedType.contains("vía")
+        "Calle bloqueada" -> normalizedType.contains("bloque") || normalizedType.contains("calle") || normalizedType.contains("cerrada")
+        "Iluminación" -> normalizedType.contains("luminaria") || normalizedType.contains("ilumin")
+        "Residuos" -> normalizedType.contains("residuo") || normalizedType.contains("basura")
+        "Tránsito" -> normalizedType.contains("transito") || normalizedType.contains("tránsito") || normalizedType.contains("choque") || normalizedType.contains("veh")
+        else -> true
+    }
+}
 private fun reportIcon(type: String): ImageVector {
     val normalizedType = type.lowercase()
 
@@ -569,6 +620,7 @@ private fun reportIcon(type: String): ImageVector {
         normalizedType.contains("residuo") -> Icons.Outlined.Delete
         normalizedType.contains("transito") ||
                 normalizedType.contains("tránsito") -> Icons.Outlined.DirectionsCar
+        normalizedType.contains("bloque") || normalizedType.contains("calle") -> Icons.Outlined.Traffic
         else -> Icons.Outlined.Construction
     }
 }

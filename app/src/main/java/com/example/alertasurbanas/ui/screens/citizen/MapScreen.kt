@@ -793,7 +793,7 @@ private fun FiltersSheetContent(
     onClearFilters: () -> Unit,
     onApply: () -> Unit
 ) {
-    val categories = listOf("Todas", "Tránsito", "Vía pública", "Iluminación", "Seguridad", "Incendio")
+    val categories = listOf("Todas", "Bache", "Luminaria", "Residuos", "Tránsito", "Calle bloqueada")
     val urgencies = listOf("Todas", "Alta", "Media", "Baja")
 
     Column(
@@ -1491,12 +1491,12 @@ private fun MapInformation(
 private fun iconForCategory(category: String): ImageVector {
     val normalized = category.lowercase()
     return when {
-        normalized.contains("bache") || normalized.contains("vía") || normalized.contains("via") -> Icons.Outlined.Construction
+        normalized.contains("bache") || normalized.contains("via") || normalized.contains("vía") -> Icons.Outlined.Construction
         normalized.contains("luminaria") || normalized.contains("ilumin") -> Icons.Outlined.Lightbulb
         normalized.contains("residuo") || normalized.contains("basura") -> Icons.Outlined.Delete
-        normalized.contains("tránsito") || normalized.contains("transito") || normalized.contains("choque") || normalized.contains("veh") -> Icons.Outlined.DirectionsCar
+        normalized.contains("transito") || normalized.contains("tránsito") || normalized.contains("choque") || normalized.contains("veh") -> Icons.Outlined.DirectionsCar
+        normalized.contains("bloque") || normalized.contains("calle") || normalized.contains("cerrada") -> Icons.Outlined.Traffic
         normalized.contains("seguridad") || normalized.contains("riesgo") -> Icons.Outlined.Shield
-        normalized.contains("incendio") || normalized.contains("fuego") -> Icons.Outlined.LocalFireDepartment
         normalized == "alta" || normalized == "media" || normalized == "baja" -> Icons.Outlined.ReportProblem
         else -> Icons.Outlined.Traffic
     }

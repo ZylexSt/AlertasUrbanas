@@ -690,6 +690,8 @@ private fun reportImageForType(type: String): Int {
         normalizedType.contains("residuo") -> R.drawable.report_residuos
         normalizedType.contains("transito") -> R.drawable.report_transito
         normalizedType.contains("tránsito") -> R.drawable.report_transito
+        normalizedType.contains("bloque") -> R.drawable.report_transito
+        normalizedType.contains("calle") -> R.drawable.report_transito
         else -> R.drawable.report_bache
     }
 }

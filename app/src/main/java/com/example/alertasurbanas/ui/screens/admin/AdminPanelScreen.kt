@@ -447,6 +447,7 @@ private fun reportIcon(type: String): ImageVector {
         normalizedType.contains("residuo") -> Icons.Outlined.Delete
         normalizedType.contains("transito") ||
                 normalizedType.contains("tránsito") -> Icons.Outlined.DirectionsCar
+        normalizedType.contains("bloque") || normalizedType.contains("calle") -> Icons.Outlined.Traffic
         else -> Icons.Outlined.Construction
     }
 }

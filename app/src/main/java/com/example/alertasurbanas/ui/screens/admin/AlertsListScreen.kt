@@ -1,4 +1,4 @@
-﻿package com.example.alertasurbanas.ui.screens.admin
+package com.example.alertasurbanas.ui.screens.admin
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Traffic
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -369,6 +370,7 @@ private fun reportIcon(type: String): ImageVector {
         normalizedType.contains("luminaria") || normalizedType.contains("iluminacion") || normalizedType.contains("iluminación") -> Icons.Outlined.Lightbulb
         normalizedType.contains("residuo") -> Icons.Outlined.Delete
         normalizedType.contains("transito") || normalizedType.contains("tránsito") -> Icons.Outlined.DirectionsCar
+        normalizedType.contains("bloque") || normalizedType.contains("calle") -> Icons.Outlined.Traffic
         else -> Icons.Outlined.Construction
     }
 }
