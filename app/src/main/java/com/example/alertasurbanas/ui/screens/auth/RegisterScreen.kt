@@ -3,6 +3,8 @@ package com.example.alertasurbanas.ui.screens.auth
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -43,11 +45,14 @@ fun RegisterScreen(
     var showPassword by remember { mutableStateOf(false) }
 
     val visibleError = localError.ifBlank { errorMessage }
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(RegisterBackground)
+            .imePadding()
+            .verticalScroll(scrollState)
             .padding(horizontal = 26.dp, vertical = 42.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

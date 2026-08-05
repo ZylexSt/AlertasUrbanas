@@ -107,7 +107,6 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { Header(userName = userName, unreadNotificationsCount = unreadNotificationsCount, onOpenNotifications = onOpenNotifications) }
-            item { SearchBar() }
             item { NearbyAlert(report = nearbyReports.firstOrNull(), reference = distanceOrigin) }
 
             item {

@@ -56,6 +56,21 @@ android {
             "AI_API_BASE_URL",
             "\"${localProperty("AI_API_BASE_URL").ifBlank { "http://10.0.2.2:8000" }}\""
         )
+        buildConfigField(
+            "String",
+            "SUPABASE_EMAIL_FUNCTION_URL",
+            "\"${localProperty("SUPABASE_EMAIL_FUNCTION_URL")}\""
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_ANON_KEY",
+            "\"${localProperty("SUPABASE_ANON_KEY")}\""
+        )
+        buildConfigField(
+            "String",
+            "ADMIN_NOTIFICATION_EMAIL",
+            "\"${localProperty("ADMIN_NOTIFICATION_EMAIL")}\""
+        )
     }
 
     buildTypes {

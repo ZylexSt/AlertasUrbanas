@@ -94,12 +94,14 @@ fun CreateReportScreen(
             )
 
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding(),
                 contentPadding = PaddingValues(
                     start = 20.dp,
                     end = 20.dp,
                     top = 8.dp,
-                    bottom = 24.dp
+                    bottom = 96.dp
                 ),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {

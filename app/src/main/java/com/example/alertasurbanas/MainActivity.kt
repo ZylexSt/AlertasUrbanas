@@ -27,6 +27,7 @@ import com.example.alertasurbanas.ui.screens.auth.WelcomeScreen
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import kotlinx.coroutines.launch
 import com.example.alertasurbanas.ui.screens.admin.AdminProfileScreen
+import com.example.alertasurbanas.data.EmailNotificationService
 import com.example.alertasurbanas.data.NotificationRepository
 import com.example.alertasurbanas.data.ReportRepository
 import com.example.alertasurbanas.data.UrbanAlert
@@ -279,6 +280,13 @@ class MainActivity : ComponentActivity() {
                                         } catch (_: Exception) {
                                         }
 
+                                        scope.launch {
+                                        try {
+                                            EmailNotificationService.sendReportStatusEmail(reportToReview, "approved")
+                                        } catch (_: Exception) {
+                                        }
+                                        }
+
                                         val updatedReport = reportToReview.copy(status = "approved", rejectionReason = "")
                                         selectedReport = updatedReport
                                         allReports = allReports.map { report ->
@@ -315,6 +323,13 @@ class MainActivity : ComponentActivity() {
                                                 rejectionReason = rejectionReason
                                             )
                                         } catch (_: Exception) {
+                                        }
+
+                                        scope.launch {
+                                        try {
+                                            EmailNotificationService.sendReportStatusEmail(reportToReview, "rejected", rejectionReason)
+                                        } catch (_: Exception) {
+                                        }
                                         }
 
                                         val updatedReport = reportToReview.copy(
@@ -396,6 +411,16 @@ class MainActivity : ComponentActivity() {
                                             userName = currentUserProfile?.name.orEmpty()
                                         )
                                     } catch (_: Exception) {
+                                    }
+
+                                    scope.launch {
+                                    try {
+                                        EmailNotificationService.sendAdminNewReportEmail(
+                                            reportType = type,
+                                            userName = currentUserProfile?.name.orEmpty()
+                                        )
+                                    } catch (_: Exception) {
+                                    }
                                     }
 
                                     reportType = "Bache"

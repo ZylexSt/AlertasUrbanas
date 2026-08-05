@@ -13,6 +13,7 @@ data class UrbanReport(
     val status: String = "pending",
     val userId: String = "",
     val userName: String = "",
+    val userEmail: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val photoUrl: String = "",
     val rejectionReason: String = ""

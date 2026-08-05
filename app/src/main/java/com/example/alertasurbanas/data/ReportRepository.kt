@@ -21,6 +21,7 @@ class ReportRepository {
         val reportToSave = report.copy(
             userId = currentUser.uid,
             userName = currentUser.displayName ?: currentUser.email.orEmpty(),
+            userEmail = currentUser.email.orEmpty(),
             status = "pending",
             createdAt = System.currentTimeMillis()
         )
