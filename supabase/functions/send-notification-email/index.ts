@@ -73,6 +73,18 @@ Deno.serve(async (req) => {
 
   const responseText = await brevoResponse.text()
 
+  await saveEmailLog({
+    toEmail,
+    toName: body.toName?.trim() || "",
+    subject,
+    reportType: body.reportType?.trim() || "",
+    status: body.status?.trim() || "",
+    rejectionReason: body.rejectionReason?.trim() || "",
+    brevoStatus: brevoResponse.status,
+    success: brevoResponse.ok,
+    errorMessage: brevoResponse.ok ? "" : responseText,
+  })
+
   if (!brevoResponse.ok) {
     return jsonResponse(
       {
@@ -86,6 +98,44 @@ Deno.serve(async (req) => {
 
   return jsonResponse({ ok: true, brevo: safeJson(responseText) }, 200)
 })
+
+async function saveEmailLog(log: {
+  toEmail: string
+  toName: string
+  subject: string
+  reportType: string
+  status: string
+  rejectionReason: string
+  brevoStatus: number
+  success: boolean
+  errorMessage: string
+}) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+
+  if (!supabaseUrl || !serviceRoleKey) return
+
+  await fetch(`${supabaseUrl}/rest/v1/email_logs`, {
+    method: "POST",
+    headers: {
+      "apikey": serviceRoleKey,
+      "Authorization": `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      "Prefer": "return=minimal",
+    },
+    body: JSON.stringify({
+      to_email: log.toEmail,
+      to_name: log.toName || null,
+      subject: log.subject,
+      report_type: log.reportType || null,
+      report_status: log.status || null,
+      rejection_reason: log.rejectionReason || null,
+      brevo_status: log.brevoStatus,
+      success: log.success,
+      error_message: log.errorMessage || null,
+    }),
+  })
+}
 
 function buildSubject(body: EmailRequest): string {
   if (body.status === "approved") return "Tu reporte fue validado"
