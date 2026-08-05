@@ -2,7 +2,9 @@ package com.example.alertasurbanas.data
 
 import com.example.alertasurbanas.BuildConfig
 import com.example.alertasurbanas.model.UrbanReport
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.OutputStreamWriter
@@ -15,10 +17,7 @@ object EmailNotificationService {
         status: String,
         rejectionReason: String = ""
     ) {
-        val recipientEmail = report.userEmail.ifBlank {
-            report.userName.takeIf { it.contains("@") }.orEmpty()
-        }
-
+        val recipientEmail = resolveRecipientEmail(report)
         if (recipientEmail.isBlank()) return
 
         val payload = JSONObject().apply {
@@ -50,6 +49,27 @@ object EmailNotificationService {
         }
 
         postEmail(payload)
+    }
+
+    private suspend fun resolveRecipientEmail(report: UrbanReport): String {
+        val reportEmail = report.userEmail.trim()
+        if (reportEmail.isNotBlank()) return reportEmail
+
+        val userNameEmail = report.userName.trim().takeIf { it.contains("@") }.orEmpty()
+        if (userNameEmail.isNotBlank()) return userNameEmail
+
+        if (report.userId.isBlank()) return ""
+
+        return runCatching {
+            FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(report.userId)
+                .get()
+                .await()
+                .getString("email")
+                .orEmpty()
+                .trim()
+        }.getOrDefault("")
     }
 
     private suspend fun postEmail(payload: JSONObject) = withContext(Dispatchers.IO) {
