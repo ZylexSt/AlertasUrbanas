@@ -2,6 +2,7 @@ package com.example.alertasurbanas
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -91,6 +92,27 @@ class MainActivity : ComponentActivity() {
                 var notificationsError by rememberSaveable { mutableStateOf("") }
                 var isNotificationsLoading by rememberSaveable { mutableStateOf(false) }
                 var unreadNotificationsCount by rememberSaveable { mutableStateOf(0) }
+
+                fun handleSystemBack() {
+                    selectedScreen = when (selectedScreen) {
+                        "Login", "Registro" -> "Bienvenida"
+                        "Detalle" -> "Alertas"
+                        "DetalleAdmin" -> "ListaAlertas"
+                        "DetallePublico" -> publicDetailBackScreen
+                        "EditarReporte" -> "Detalle"
+                        "SeleccionarUbicacion" -> locationReturnScreen
+                        "Notificaciones" -> notificationsBackScreen
+                        "PlanearRuta" -> publicDetailBackScreen
+                        "IA" -> "Inicio"
+                        "Mapa", "Reportar", "Alertas", "Perfil" -> "Inicio"
+                        "ListaAlertas", "PanelReportes", "AdminPerfil" -> "PanelAdmin"
+                        else -> selectedScreen
+                    }
+                }
+
+                BackHandler(enabled = true) {
+                    handleSystemBack()
+                }
 
                 when (selectedScreen) {
                     "Bienvenida" -> WelcomeScreen(

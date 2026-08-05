@@ -4,6 +4,8 @@ import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,29 +36,34 @@ fun WelcomeScreen(
     onLogin: () -> Unit = {},
     onRegister: () -> Unit = {}
 ) {
+    val scrollState = rememberScrollState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Background)
-            .padding(horizontal = 24.dp, vertical = 36.dp)
+            .padding(horizontal = 24.dp, vertical = 20.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(58.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            UrbanAppLogo(size = 138.dp)
+            UrbanAppLogo(size = 104.dp)
 
-            Spacer(modifier = Modifier.height(34.dp))
+            Spacer(modifier = Modifier.height(22.dp))
 
             Text(
                 text = "Alertas Urbanas",
                 color = TextPrimary,
-                fontSize = 38.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center,
-                lineHeight = 42.sp
+                lineHeight = 36.sp
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -64,23 +71,23 @@ fun WelcomeScreen(
             Text(
                 text = "Reporta incidentes, consulta alertas cercanas y encuentra rutas más seguras.",
                 color = TextSecondary,
-                fontSize = 16.sp,
-                lineHeight = 24.sp,
+                fontSize = 14.sp,
+                lineHeight = 21.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 10.dp)
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     WelcomeFeature(
                         icon = Icons.Outlined.LocationOn,
@@ -100,13 +107,13 @@ fun WelcomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Button(
                 onClick = onLogin,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(58.dp),
+                    .height(54.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Primary
@@ -126,7 +133,7 @@ fun WelcomeScreen(
                 onClick = onRegister,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(58.dp),
+                    .height(54.dp),
                 shape = RoundedCornerShape(18.dp),
                 border = BorderStroke(
                     width = 1.4.dp,
@@ -141,7 +148,7 @@ fun WelcomeScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }

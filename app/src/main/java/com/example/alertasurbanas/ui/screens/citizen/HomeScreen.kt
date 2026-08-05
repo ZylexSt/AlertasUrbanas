@@ -476,12 +476,6 @@ private fun AlertCard(
                     text = formatReportDate(report.createdAt)
                 )
             }
-
-            Icon(
-                imageVector = Icons.Outlined.BookmarkBorder,
-                contentDescription = "Guardar alerta",
-                tint = TextPrimary.copy(alpha = 0.7f)
-            )
         }
     }
 }

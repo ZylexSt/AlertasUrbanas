@@ -683,15 +683,17 @@ private fun reportImageForType(type: String): Int {
     val normalizedType = type.lowercase()
 
     return when {
-        normalizedType.contains("bache") -> R.drawable.report_bache
+        normalizedType.contains("bloque") || normalizedType.contains("calle") -> R.drawable.report_calle_bloqueada
+        normalizedType.contains("bache") || normalizedType.contains("via") || normalizedType.contains("vía") || normalizedType.contains("publica") || normalizedType.contains("pública") -> R.drawable.report_bache
         normalizedType.contains("luminaria") -> R.drawable.report_luminaria
         normalizedType.contains("iluminacion") -> R.drawable.report_luminaria
         normalizedType.contains("iluminación") -> R.drawable.report_luminaria
-        normalizedType.contains("residuo") -> R.drawable.report_residuos
+        normalizedType.contains("iluminaciÃ³n") -> R.drawable.report_luminaria
+        normalizedType.contains("residuo") || normalizedType.contains("basura") -> R.drawable.report_residuos
         normalizedType.contains("transito") -> R.drawable.report_transito
         normalizedType.contains("tránsito") -> R.drawable.report_transito
-        normalizedType.contains("bloque") -> R.drawable.report_transito
-        normalizedType.contains("calle") -> R.drawable.report_transito
+        normalizedType.contains("trÃ¡nsito") -> R.drawable.report_transito
+        normalizedType.contains("choque") || normalizedType.contains("veh") -> R.drawable.report_transito
         else -> R.drawable.report_bache
     }
 }
