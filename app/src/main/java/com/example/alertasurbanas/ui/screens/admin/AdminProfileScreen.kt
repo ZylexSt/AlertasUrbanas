@@ -26,7 +26,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Visibility
@@ -158,6 +157,17 @@ fun AdminProfileScreen(
 
                     AdminProfileMenuItem(
                         option = AdminProfileOption(
+                            icon = Icons.Outlined.AdminPanelSettings,
+                            title = "Gestion de usuarios",
+                            subtitle = "Asignar permisos de administrador"
+                        ),
+                        onClick = { onNavigate("GestionUsuarios") }
+                    )
+
+                    HorizontalDivider(color = UrbanColors.Border)
+
+                    AdminProfileMenuItem(
+                        option = AdminProfileOption(
                             icon = Icons.Outlined.Notifications,
                             title = "Notificaciones",
                             subtitle = "Avisos de reportes pendientes"
@@ -183,13 +193,6 @@ fun AdminProfileScreen(
                         onClick = { showPasswordDialog = true }
                     )
 
-                    HorizontalDivider(color = UrbanColors.Border)
-
-                    AdminProfileItem(
-                        icon = Icons.Outlined.Security,
-                        title = "Actividad de cuenta",
-                        subtitle = "Ultimos accesos y acciones realizadas"
-                    )
                 }
             }
 

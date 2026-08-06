@@ -27,6 +27,7 @@ import com.example.alertasurbanas.ui.screens.auth.WelcomeScreen
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import kotlinx.coroutines.launch
 import com.example.alertasurbanas.ui.screens.admin.AdminProfileScreen
+import com.example.alertasurbanas.ui.screens.admin.AdminUsersScreen
 import com.example.alertasurbanas.data.EmailNotificationService
 import com.example.alertasurbanas.data.AIRecommendationApi
 import com.example.alertasurbanas.data.NotificationRepository
@@ -74,6 +75,10 @@ class MainActivity : ComponentActivity() {
                 var allReports by remember { mutableStateOf<List<UrbanReport>>(emptyList()) }
                 var adminReportsError by rememberSaveable { mutableStateOf("") }
                 var isAdminReportsLoading by rememberSaveable { mutableStateOf(false) }
+                var adminUsers by remember { mutableStateOf<List<UserProfile>>(emptyList()) }
+                var adminUsersError by rememberSaveable { mutableStateOf("") }
+                var isAdminUsersLoading by rememberSaveable { mutableStateOf(false) }
+                var updatingUserRoleId by rememberSaveable { mutableStateOf("") }
                 var isReviewReportLoading by rememberSaveable { mutableStateOf(false) }
 
                 var isDeleteReportLoading by rememberSaveable { mutableStateOf(false) }
@@ -82,6 +87,7 @@ class MainActivity : ComponentActivity() {
                 var publicDetailBackScreen by rememberSaveable { mutableStateOf("Inicio") }
                 var notificationsBackScreen by rememberSaveable { mutableStateOf("Inicio") }
                 var mapFocusReport by remember { mutableStateOf<UrbanReport?>(null) }
+                var openMapCenteredOnUser by rememberSaveable { mutableStateOf(false) }
                 var detailRecommendationText by rememberSaveable { mutableStateOf("") }
 
                 var errorMessage by rememberSaveable { mutableStateOf("") }
@@ -104,6 +110,7 @@ class MainActivity : ComponentActivity() {
                         "EditarReporte" -> "Detalle"
                         "SeleccionarUbicacion" -> locationReturnScreen
                         "Notificaciones" -> notificationsBackScreen
+                        "GestionUsuarios" -> "Perfil"
                         "IA" -> "Inicio"
                         "Mapa", "Reportar", "Alertas", "Perfil" -> "Inicio"
                         "ListaAlertas", "PanelReportes", "AdminPerfil" -> "PanelAdmin"
@@ -113,6 +120,29 @@ class MainActivity : ComponentActivity() {
 
                 BackHandler(enabled = true) {
                     handleSystemBack()
+                }
+
+                LaunchedEffect(Unit) {
+                    if (authManager.isLoggedIn()) {
+                        try {
+                            isAuthLoading = true
+                            val savedProfile = authManager.getCurrentUserProfile()
+                            currentUserProfile = savedProfile
+                            currentUserRole = savedProfile.role
+                            selectedScreen = if (savedProfile.role == "admin") {
+                                "Administrador"
+                            } else {
+                                "Inicio"
+                            }
+                        } catch (_: Exception) {
+                            authManager.logout()
+                            currentUserProfile = null
+                            currentUserRole = "citizen"
+                            selectedScreen = "Bienvenida"
+                        } finally {
+                            isAuthLoading = false
+                        }
+                    }
                 }
 
                 LaunchedEffect(selectedScreen, selectedReport?.id, allReports.size, myReports.size) {
@@ -224,6 +254,10 @@ class MainActivity : ComponentActivity() {
                         MapScreen(
                             alerts = allReports.toMapAlerts(),
                             focusAlert = mapFocusReport?.toMapAlert(),
+                            centerOnUserLocationOnOpen = openMapCenteredOnUser,
+                            onUserLocationCenterHandled = {
+                                openMapCenteredOnUser = false
+                            },
                             onFocusHandled = {
                                 mapFocusReport = null
                             },
@@ -240,7 +274,9 @@ class MainActivity : ComponentActivity() {
                         report = selectedReport,
                         recommendationText = detailRecommendationText,
                         canEdit = selectedReport?.status == "pending" || selectedReport?.status == "rejected",
-                        canDelete = selectedReport?.id?.isNotBlank() == true,
+                        canDelete = selectedReport?.let { report ->
+                            report.id.isNotBlank() && (report.status == "pending" || report.status == "rejected")
+                        } == true,
                         isDeleting = isDeleteReportLoading,
                         onBack = {
                             selectedScreen = "Alertas"
@@ -292,16 +328,35 @@ class MainActivity : ComponentActivity() {
                         report = selectedReport,
                         recommendationText = detailRecommendationText,
                         canEdit = false,
-                        canDelete = false,
+                        canDelete = selectedReport?.id?.isNotBlank() == true,
                         canReview = selectedReport?.status == "pending",
-                        isDeleting = false,
+                        isDeleting = isDeleteReportLoading,
                         isReviewing = isReviewReportLoading,
+                        showMapButton = false,
                         onBack = {
                             selectedScreen = "ListaAlertas"
                         },
-                        onSafeRoute = {
-                            mapFocusReport = selectedReport
-                            selectedScreen = "Mapa"
+                        onDeleteReport = {
+                            val reportToDelete = selectedReport
+
+                            if (reportToDelete?.id?.isNotBlank() == true) {
+                                scope.launch {
+                                    try {
+                                        isDeleteReportLoading = true
+                                        adminReportsError = ""
+
+                                        reportRepository.deleteReport(reportToDelete.id)
+                                        allReports = allReports.filterNot { it.id == reportToDelete.id }
+                                        myReports = myReports.filterNot { it.id == reportToDelete.id }
+                                        selectedReport = null
+                                        selectedScreen = "ListaAlertas"
+                                    } catch (e: Exception) {
+                                        adminReportsError = e.message ?: "No se pudo eliminar el reporte."
+                                    } finally {
+                                        isDeleteReportLoading = false
+                                    }
+                                }
+                            }
                         },
                         onApproveReport = {
                             val reportToReview = selectedReport
@@ -432,6 +487,7 @@ class MainActivity : ComponentActivity() {
                             reportDescription = it
                         },
                         locationName = reportLocationName,
+                        hasSelectedLocation = reportLatitude != null && reportLongitude != null,
                         isLoading = isReportLoading,
                         errorMessage = reportErrorMessage,
                         onSubmitReport = { type, description, urgency, locationName ->
@@ -509,6 +565,7 @@ class MainActivity : ComponentActivity() {
                             reportDescription = it
                         },
                         locationName = reportLocationName,
+                        hasSelectedLocation = reportLatitude != null && reportLongitude != null,
                         screenTitle = "Editar reporte",
                         screenSubtitle = if (selectedReport?.status == "rejected") "Corrige el reporte para enviarlo nuevamente a revision." else "Actualiza la informacion mientras el reporte esta pendiente.",
                         submitButtonText = if (selectedReport?.status == "rejected") "Reenviar reporte" else "Guardar cambios",
@@ -519,6 +576,7 @@ class MainActivity : ComponentActivity() {
                                 try {
                                     reportErrorMessage = ""
                                     isReportLoading = true
+                                    val wasRejectedReport = selectedReport?.status == "rejected"
 
                                     reportRepository.updateReport(
                                         reportId = editingReportId,
@@ -548,6 +606,17 @@ class MainActivity : ComponentActivity() {
                                                 updatedReport
                                             } else {
                                                 report
+                                            }
+                                        }
+
+                                        if (wasRejectedReport) {
+                                            try {
+                                                notificationRepository.createReportSubmittedNotification(
+                                                    reportId = updatedReport.id,
+                                                    reportType = updatedReport.type,
+                                                    userName = currentUserProfile?.name.orEmpty()
+                                                )
+                                            } catch (_: Exception) {
                                             }
                                         }
                                     }
@@ -683,6 +752,51 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                        )
+                    }
+                    "GestionUsuarios" -> {
+                        LaunchedEffect(Unit) {
+                            try {
+                                adminUsersError = ""
+                                isAdminUsersLoading = true
+                                adminUsers = authManager.getAllUserProfiles()
+                            } catch (e: Exception) {
+                                adminUsersError = e.message ?: "No se pudieron cargar los usuarios."
+                            } finally {
+                                isAdminUsersLoading = false
+                            }
+                        }
+
+                        AdminUsersScreen(
+                            users = adminUsers,
+                            currentUserId = currentUserProfile?.uid.orEmpty(),
+                            isLoading = isAdminUsersLoading,
+                            errorMessage = adminUsersError,
+                            updatingUserId = updatingUserRoleId,
+                            onBack = { selectedScreen = "Perfil" },
+                            onRoleSelected = { user, newRole ->
+                                if (user.uid != currentUserProfile?.uid && user.role != newRole) {
+                                    scope.launch {
+                                        try {
+                                            adminUsersError = ""
+                                            updatingUserRoleId = user.uid
+                                            authManager.updateUserRole(user.uid, newRole)
+                                            adminUsers = adminUsers.map { existingUser ->
+                                                if (existingUser.uid == user.uid) {
+                                                    existingUser.copy(role = newRole)
+                                                } else {
+                                                    existingUser
+                                                }
+                                            }
+                                        } catch (e: Exception) {
+                                            adminUsersError = e.message ?: "No se pudo actualizar el usuario."
+                                        } finally {
+                                            updatingUserRoleId = ""
+                                        }
+                                    }
+                                }
+                            },
+                            onNavigate = { selectedScreen = it }
                         )
                     }
                     "Perfil" -> {
@@ -904,6 +1018,11 @@ class MainActivity : ComponentActivity() {
                             onOpenNotifications = {
                                 notificationsBackScreen = "Inicio"
                                 selectedScreen = "Notificaciones"
+                            },
+                            onViewNearbyAlerts = {
+                                openMapCenteredOnUser = true
+                                mapFocusReport = null
+                                selectedScreen = "Mapa"
                             },
                             onNavigate = { selectedScreen = it }
                         )

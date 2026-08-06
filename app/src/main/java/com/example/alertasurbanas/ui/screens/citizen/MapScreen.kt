@@ -1,6 +1,10 @@
 package com.example.alertasurbanas.ui.screens.citizen
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -77,6 +82,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.example.alertasurbanas.data.AlertRepository
 import com.example.alertasurbanas.data.CarMapSyncRepository
 import com.example.alertasurbanas.data.MapDefaults
@@ -89,6 +95,8 @@ import com.example.alertasurbanas.ui.screens.shared.MapTilerMap
 import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import com.example.alertasurbanas.ui.theme.UrbanColors
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
@@ -110,12 +118,15 @@ private val MapLow = UrbanColors.Primary
 fun MapScreen(
     alerts: List<UrbanAlert> = emptyList(),
     focusAlert: UrbanAlert? = null,
+    centerOnUserLocationOnOpen: Boolean = false,
+    onUserLocationCenterHandled: () -> Unit = {},
     onFocusHandled: () -> Unit = {},
     onNavigate: (String) -> Unit = {},
     onOpenAlert: (UrbanAlert) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
     val carMapSyncRepository = remember { CarMapSyncRepository() }
 
     var searchQuery by remember { mutableStateOf("") }
@@ -179,6 +190,23 @@ fun MapScreen(
         }
     }
 
+    fun closeSelectedPlaceCard() {
+        selectedPlace = null
+        showSelectedPlaceCard = false
+        isRouteOriginSearchActive = false
+        routeOriginSuggestions = emptyList()
+    }
+
+    fun cancelActiveRoute() {
+        routePoints = emptyList()
+        routeResult = null
+        routeResults = emptyList()
+        selectedRouteIndex = 0
+        routeDestinationCoordinate = null
+        routeDestinationName = ""
+        clearCarRouteSafely()
+    }
+
     fun moveToSearchResult(result: MapSearchResult) {
         searchQuery = result.title
         searchSuggestions = emptyList()
@@ -228,23 +256,60 @@ fun MapScreen(
         }
     }
 
-    fun centerOnUtcjLocation() {
-        val coordinate = MapDefaults.UtcjLocation
-        currentLocation = coordinate
-        routeOriginCoordinate = coordinate
-        routeOriginQuery = MapDefaults.UtcjAddress
-        mapCenter = coordinate
-        mapZoom = 16.0
-        selectedAlert = null
-        selectedPlace = null
-        showSelectedPlaceCard = false
-        routePoints = emptyList()
-        routeResult = null
-        routeResults = emptyList()
-        selectedRouteIndex = 0
-        routeDestinationCoordinate = null
-        routeDestinationName = ""
-        clearCarRouteSafely()
+    fun centerOnDeviceLocation() {
+        try {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener { location ->
+                    if (location != null) {
+                        val coordinate = LatLng(location.latitude, location.longitude)
+                        currentLocation = coordinate
+                        routeOriginCoordinate = coordinate
+                        routeOriginQuery = "Mi ubicacion actual"
+                        mapCenter = coordinate
+                        mapZoom = 15.5
+                        selectedAlert = null
+                        selectedPlace = null
+                        showSelectedPlaceCard = false
+                        routePoints = emptyList()
+                        routeResult = null
+                        routeResults = emptyList()
+                        selectedRouteIndex = 0
+                        routeDestinationCoordinate = null
+                        routeDestinationName = ""
+                        clearCarRouteSafely()
+                    } else {
+                        Toast.makeText(context, "En emulador asigna una ubicacion simulada.", Toast.LENGTH_LONG).show()
+                    }
+                }
+        } catch (_: SecurityException) {
+            Toast.makeText(context, "Activa el permiso de ubicacion.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) centerOnDeviceLocation()
+    }
+
+    fun requestCurrentLocation() {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            centerOnDeviceLocation()
+        } else {
+            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
+    LaunchedEffect(centerOnUserLocationOnOpen) {
+        if (centerOnUserLocationOnOpen) {
+            requestCurrentLocation()
+            onUserLocationCenterHandled()
+        }
     }
 
     fun searchPlace() {
@@ -484,7 +549,7 @@ fun MapScreen(
 
             if (!isSearchActive && !isRouteOriginSearchActive) {
                 MapControls(
-                    onMyLocation = { centerOnUtcjLocation() },
+                    onMyLocation = { requestCurrentLocation() },
                     onZoomIn = { mapZoom = (mapZoom + 1.0).coerceAtMost(19.0) },
                     onZoomOut = { mapZoom = (mapZoom - 1.0).coerceAtLeast(4.0) },
                     modifier = Modifier
@@ -506,6 +571,7 @@ fun MapScreen(
                     originSuggestions = routeOriginSuggestions,
                     isOriginSearchActive = isRouteOriginSearchActive,
                     isRouteLoading = isRouteLoading,
+                    onClose = { closeSelectedPlaceCard() },
                     onOriginQueryChange = {
                         routeOriginQuery = it
                         isRouteOriginSearchActive = true
@@ -598,7 +664,8 @@ fun MapScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(16.dp),
-                    onOpenDetails = { showSelectedPlaceCard = true }
+                    onOpenDetails = { showSelectedPlaceCard = true },
+                    onCancelRoute = { cancelActiveRoute() }
                 )
             }
 
@@ -1134,6 +1201,7 @@ private fun SelectedPlaceCard(
     originSuggestions: List<MapSearchResult>,
     isOriginSearchActive: Boolean,
     isRouteLoading: Boolean,
+    onClose: () -> Unit,
     onOriginQueryChange: (String) -> Unit,
     onClearOrigin: () -> Unit,
     onOriginSelected: (MapSearchResult) -> Unit,
@@ -1148,13 +1216,29 @@ private fun SelectedPlaceCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 7.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Box(
-                modifier = Modifier
-                    .width(42.dp)
-                    .height(4.dp)
-                    .background(color = UrbanColors.MapLine, shape = CircleShape)
-                    .align(Alignment.CenterHorizontally)
-            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .width(42.dp)
+                        .height(4.dp)
+                        .background(color = UrbanColors.MapLine, shape = CircleShape)
+                        .align(Alignment.Center)
+                )
+
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Cerrar",
+                        tint = MapHigh,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -1350,7 +1434,10 @@ private fun RouteOptionRow(
                         route.nearbyReports == 0 -> MapPrimary
                         else -> MapMedium
                     },
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -1372,7 +1459,8 @@ private fun ActiveRouteSummaryCard(
     route: MapRouteResult,
     destinationName: String,
     modifier: Modifier = Modifier,
-    onOpenDetails: () -> Unit
+    onOpenDetails: () -> Unit,
+    onCancelRoute: () -> Unit
 ) {
     Card(
         onClick = onOpenDetails,
@@ -1382,7 +1470,7 @@ private fun ActiveRouteSummaryCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 7.dp)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -1393,7 +1481,7 @@ private fun ActiveRouteSummaryCard(
                     imageVector = Icons.Outlined.Route,
                     contentDescription = null,
                     tint = MapPrimary,
-                    modifier = Modifier.padding(14.dp).size(28.dp)
+                    modifier = Modifier.padding(11.dp).size(24.dp)
                 )
             }
 
@@ -1404,24 +1492,45 @@ private fun ActiveRouteSummaryCard(
                     text = "Ruta activa",
                     color = MapText,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Text(
                     text = destinationName,
                     color = MapText.copy(alpha = 0.60f),
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Column(horizontalAlignment = Alignment.End) {
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(
+                modifier = Modifier.widthIn(min = 96.dp, max = 132.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                IconButton(
+                    onClick = onCancelRoute,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Cancelar ruta",
+                        tint = MapHigh,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
                 Text(
                     text = route.summaryText,
                     color = MapPrimary,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Text(
@@ -1431,7 +1540,10 @@ private fun ActiveRouteSummaryCard(
                         route.nearbyReports == 0 -> MapPrimary
                         else -> MapMedium
                     },
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
+                    lineHeight = 12.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.SemiBold
                 )
             }

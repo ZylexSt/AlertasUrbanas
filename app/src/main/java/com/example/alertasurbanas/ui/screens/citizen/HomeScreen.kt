@@ -65,6 +65,7 @@ fun HomeScreen(
     unreadNotificationsCount: Int = 0,
     onOpenReport: (UrbanReport) -> Unit = {},
     onOpenNotifications: () -> Unit = {},
+    onViewNearbyAlerts: () -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
     val categories = listOf(
@@ -154,9 +155,7 @@ fun HomeScreen(
                     )
 
                     TextButton(
-                        onClick = {
-                            onNavigate("Alertas")
-                        }
+                        onClick = onViewNearbyAlerts
                     ) {
                         Text(
                             text = "Ver todas",

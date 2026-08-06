@@ -147,19 +147,6 @@ fun ProfileScreen(
                         badgeCount = unreadNotificationsCount,
                         onClick = { onNavigate("Notificaciones") }
                     )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 62.dp),
-                        color = ProfileText.copy(alpha = 0.08f)
-                    )
-
-                    ProfileMenuOption(
-                        option = ProfileOption(
-                            title = "Apariencia",
-                            subtitle = "Tema y visualización",
-                            icon = Icons.Outlined.Palette
-                        )
-                    )
                 }
             }
 

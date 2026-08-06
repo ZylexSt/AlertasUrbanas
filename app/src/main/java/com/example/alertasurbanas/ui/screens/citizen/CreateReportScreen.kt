@@ -48,6 +48,7 @@ fun CreateReportScreen(
     description: String = "",
     onDescriptionChange: (String) -> Unit = {},
     locationName: String = "Av. Independencia 250, Col. Centro",
+    hasSelectedLocation: Boolean = false,
     screenTitle: String = "Crear reporte",
     screenSubtitle: String = "Ayúdanos a mantener informada a la comunidad.",
     submitButtonText: String = "Enviar reporte",
@@ -131,6 +132,8 @@ fun CreateReportScreen(
 
                 item {
                     LocationSelector(
+                        locationName = locationName,
+                        hasSelectedLocation = hasSelectedLocation,
                         onClick = onSelectLocation
                     )
                 }
@@ -365,7 +368,11 @@ private fun ReportTypeCard(
 }
 
 @Composable
-private fun LocationSelector(onClick: () -> Unit) {
+private fun LocationSelector(
+    locationName: String,
+    hasSelectedLocation: Boolean,
+    onClick: () -> Unit
+) {
     OutlinedCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -401,8 +408,8 @@ private fun LocationSelector(onClick: () -> Unit) {
                 )
 
                 Text(
-                    text = "Selecciona un punto en el mapa",
-                    color = ReportText.copy(alpha = 0.6f),
+                    text = if (hasSelectedLocation) locationName else "Selecciona un punto en el mapa",
+                    color = if (hasSelectedLocation) ReportPrimary else ReportText.copy(alpha = 0.6f),
                     fontSize = 12.sp
                 )
             }

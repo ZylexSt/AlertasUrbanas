@@ -13,7 +13,7 @@ data class UserProfile(
     val role: String = "citizen"
 ) {
     val roleLabel: String
-        get() = if (role == "admin") "Administrador" else "Ciudadana"
+        get() = if (role == "admin") "Administrador" else "Ciudadano"
 
     val initials: String
         get() {
@@ -158,6 +158,40 @@ class AuthManager {
         val credential = EmailAuthProvider.getCredential(currentEmail, currentPassword)
         user.reauthenticate(credential).await()
         user.updatePassword(newPassword).await()
+    }
+
+    suspend fun getAllUserProfiles(): List<UserProfile> {
+        return db.collection("users")
+            .get()
+            .await()
+            .documents
+            .map { document ->
+                UserProfile(
+                    uid = document.id,
+                    name = document.getString("name").orEmpty(),
+                    email = document.getString("email").orEmpty(),
+                    role = document.getString("role") ?: "citizen"
+                )
+            }
+            .sortedWith(compareBy<UserProfile> { it.role != "admin" }.thenBy { it.name.ifBlank { it.email } })
+    }
+
+    suspend fun updateUserRole(
+        userId: String,
+        role: String
+    ) {
+        if (userId.isBlank()) {
+            throw Exception("No se encontro el usuario")
+        }
+
+        if (role !in listOf("admin", "citizen")) {
+            throw Exception("Rol no valido")
+        }
+
+        db.collection("users")
+            .document(userId)
+            .update("role", role)
+            .await()
     }
 
     fun logout() {

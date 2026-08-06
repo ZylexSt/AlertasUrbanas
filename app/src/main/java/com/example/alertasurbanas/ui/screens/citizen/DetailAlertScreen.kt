@@ -45,6 +45,7 @@ fun DetailAlertScreen(
     canReview: Boolean = false,
     isDeleting: Boolean = false,
     isReviewing: Boolean = false,
+    showMapButton: Boolean = true,
     onBack: () -> Unit = {},
     onSafeRoute: () -> Unit = {},
     onEditReport: () -> Unit = {},
@@ -65,7 +66,8 @@ fun DetailAlertScreen(
     Scaffold(
         containerColor = DetailBackground,
         bottomBar = {
-            Surface(
+            if (showMapButton) {
+                Surface(
                 color = Color.White,
                 shadowElevation = 8.dp
             ) {
@@ -91,6 +93,7 @@ fun DetailAlertScreen(
                         text = "Ver en el mapa",
                         fontWeight = FontWeight.Bold
                     )
+                }
                 }
             }
         }
