@@ -3,6 +3,7 @@ package com.example.alertasurbanas.ui.screens.citizen
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
+import com.example.alertasurbanas.ui.screens.shared.rememberLiveUserLocation
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -68,6 +69,11 @@ fun HomeScreen(
     onViewNearbyAlerts: () -> Unit = {},
     onNavigate: (String) -> Unit = {}
 ) {
+    val currentLocation by rememberLiveUserLocation(
+        autoRequestPermission = true,
+        intervalMillis = 6_000L,
+        minUpdateDistanceMeters = 6f
+    )
     val categories = listOf(
         AlertCategory("Todas", Icons.Outlined.GridView),
         AlertCategory("Vía pública", Icons.Outlined.Construction),
@@ -80,7 +86,8 @@ fun HomeScreen(
 
 
 
-        val distanceOrigin = MapDefaults.UtcjLocation
+    val distanceOrigin = currentLocation ?: MapDefaults.UtcjLocation
+    val isUsingRealLocation = currentLocation != null
     val nearbyReports = reports
         .filter { it.latitude != null && it.longitude != null }
         .filter { report -> matchesHomeCategory(report, selectedCategory) }
@@ -108,7 +115,13 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item { Header(userName = userName, unreadNotificationsCount = unreadNotificationsCount, onOpenNotifications = onOpenNotifications) }
-            item { NearbyAlert(report = nearbyReports.firstOrNull(), reference = distanceOrigin) }
+            item {
+                NearbyAlert(
+                    report = nearbyReports.firstOrNull(),
+                    reference = distanceOrigin,
+                    isUsingRealLocation = isUsingRealLocation
+                )
+            }
 
             item {
                 AIHomeBanner(
@@ -197,6 +210,7 @@ fun HomeScreen(
                 items(nearbyReports, key = { it.id }) { report ->
                     AlertCard(
                         report = report,
+                        reference = distanceOrigin,
                         onClick = { onOpenReport(report) }
                     )
                 }
@@ -303,10 +317,15 @@ private fun SearchBar() {
 @Composable
 private fun NearbyAlert(
     report: UrbanReport?,
-    reference: LatLng
+    reference: LatLng,
+    isUsingRealLocation: Boolean
 ) {
     val title = report?.type?.ifBlank { "Reporte urbano" } ?: "Sin alertas cercanas"
-    val distanceText = report?.let { formatReportDistance(it, reference) } ?: "Aún no hay reportes validados cerca"
+    val distanceText = when {
+        report == null -> "Aún no hay reportes validados cerca"
+        isUsingRealLocation -> formatReportDistance(report, reference)
+        else -> "Obteniendo ubicación..."
+    }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -397,6 +416,7 @@ private fun CategoryCard(
 @Composable
 private fun AlertCard(
     report: UrbanReport,
+    reference: LatLng,
     onClick: () -> Unit
 ) {
     val color = urgencyColor(report.urgency)
@@ -467,7 +487,7 @@ private fun AlertCard(
 
                 AlertInformation(
                     icon = Icons.Outlined.NearMe,
-                    text = formatReportDistance(report, MapDefaults.UtcjLocation)
+                    text = formatReportDistance(report, reference)
                 )
 
                 AlertInformation(

@@ -639,7 +639,7 @@ private fun AISelectedZoneCard(
         }
 
         Text(
-            text = "Para calcular una ruta segura, usa Planear ruta y elige origen y destino. Ahí sí se comparan recorridos completos contra las alertas activas.",
+            text = "Para calcular una ruta segura, usa el mapa, elige destino y compara recorridos completos contra las alertas activas.",
             color = AIText.copy(alpha = 0.62f),
             fontSize = 12.sp,
             lineHeight = 17.sp
