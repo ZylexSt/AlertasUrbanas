@@ -46,9 +46,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +66,7 @@ import com.example.alertasurbanas.data.UrbanAlert
 import com.example.alertasurbanas.model.UrbanReport
 import com.example.alertasurbanas.ui.screens.shared.MapTilerMap
 import com.example.alertasurbanas.ui.theme.UrbanColors
+import kotlinx.coroutines.launch
 import org.maplibre.android.geometry.LatLng
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -77,21 +78,21 @@ import kotlin.math.sqrt
 fun AutomotiveMapDashboardScreen() {
     val repository = remember { ReportRepository() }
     val carMapSyncRepository = remember { CarMapSyncRepository() }
+    val scope = rememberCoroutineScope()
     val approvedReports by repository.observeApprovedReports().collectAsState(initial = emptyList())
     val syncedRoute by carMapSyncRepository.observeRoute().collectAsState(initial = com.example.alertasurbanas.data.CarSyncedRoute())
     val alerts = remember(approvedReports) { approvedReports.toUrbanAlerts() }
     val currentLocation = MapDefaults.UtcjLocation
 
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
-    var selectedUrgency by remember { mutableStateOf<String?>(null) }
+    val selectedCategory = syncedRoute.selectedCategory.ifBlank { "Todas" }
+    val selectedUrgency = syncedRoute.selectedUrgency.ifBlank { "Todas" }
     var selectedAlert by remember { mutableStateOf<UrbanAlert?>(null) }
     var showAlertsPanel by remember { mutableStateOf(false) }
 
     val filteredAlerts = remember(alerts, selectedCategory, selectedUrgency) {
         alerts.filter { alert ->
-            val categoryMatch = selectedCategory == null ||
-                alert.category.normalizedCategoryKey() == selectedCategory
-            val urgencyMatch = selectedUrgency == null ||
+            val categoryMatch = matchesAutomotiveCategoryFilter(alert, selectedCategory)
+            val urgencyMatch = selectedUrgency == "Todas" ||
                 alert.urgency.equals(selectedUrgency, ignoreCase = true)
             categoryMatch && urgencyMatch
         }
@@ -124,10 +125,24 @@ fun AutomotiveMapDashboardScreen() {
             selectedUrgency = selectedUrgency,
             showAlertsPanel = showAlertsPanel,
             onCategoryChange = {
-                selectedCategory = if (selectedCategory == it) null else it
+                val nextCategory = if (selectedCategory == it) "Todas" else it
+                scope.launch {
+                    carMapSyncRepository.publishFilters(
+                        selectedCategory = nextCategory,
+                        selectedUrgency = selectedUrgency,
+                        source = "automotive"
+                    )
+                }
             },
             onUrgencyChange = {
-                selectedUrgency = if (selectedUrgency == it) null else it
+                val nextUrgency = if (selectedUrgency == it) "Todas" else it
+                scope.launch {
+                    carMapSyncRepository.publishFilters(
+                        selectedCategory = selectedCategory,
+                        selectedUrgency = nextUrgency,
+                        source = "automotive"
+                    )
+                }
             },
             onToggleAlertsPanel = { showAlertsPanel = !showAlertsPanel },
             modifier = Modifier
@@ -141,6 +156,11 @@ fun AutomotiveMapDashboardScreen() {
                 routeSummaries = syncedRoute.routeSummaries,
                 routeAlerts = syncedRoute.nearbyReports,
                 selectedRouteIndex = syncedRoute.selectedRouteIndex,
+                onCancelRoute = {
+                    scope.launch {
+                        carMapSyncRepository.clearRoute(source = "automotive")
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(start = 28.dp, bottom = 118.dp)
@@ -183,8 +203,8 @@ fun AutomotiveMapDashboardScreen() {
 @Composable
 private fun AutomotiveTopBar(
     totalAlerts: Int,
-    selectedCategory: String?,
-    selectedUrgency: String?,
+    selectedCategory: String,
+    selectedUrgency: String,
     showAlertsPanel: Boolean,
     onCategoryChange: (String) -> Unit,
     onUrgencyChange: (String) -> Unit,
@@ -244,8 +264,8 @@ private fun AutomotiveTopBar(
         AutomotiveChip(
             text = "Tránsito",
             icon = Icons.Outlined.DirectionsCar,
-            selected = selectedCategory == "transito",
-            onClick = { onCategoryChange("transito") }
+            selected = selectedCategory == "Tránsito",
+            onClick = { onCategoryChange("Tránsito") }
         )
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -253,8 +273,8 @@ private fun AutomotiveTopBar(
         AutomotiveChip(
             text = "Vía pública",
             icon = Icons.Outlined.Construction,
-            selected = selectedCategory == "via_publica",
-            onClick = { onCategoryChange("via_publica") }
+            selected = selectedCategory == "Vía pública",
+            onClick = { onCategoryChange("Vía pública") }
         )
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -568,6 +588,7 @@ private fun AutomotiveRouteActiveCard(
     routeSummaries: List<String>,
     routeAlerts: List<Int>,
     selectedRouteIndex: Int,
+    onCancelRoute: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -609,6 +630,15 @@ private fun AutomotiveRouteActiveCard(
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                IconButton(onClick = onCancelRoute) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = "Detener ruta",
+                        tint = UrbanColors.HighUrgency,
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             }
@@ -781,6 +811,27 @@ private fun String.normalizedCategoryKey(): String {
         "choque" in normalized || "tránsito" in normalized || "transito" in normalized || "veh" in normalized -> "transito"
         "bache" in normalized || "vía" in normalized || "via" in normalized || "bloque" in normalized || "residuo" in normalized || "basura" in normalized -> "via_publica"
         else -> "otro"
+    }
+}
+
+private fun matchesAutomotiveCategoryFilter(alert: UrbanAlert, selectedCategory: String): Boolean {
+    if (selectedCategory == "Todas") return true
+
+    val normalized = "${alert.category} ${alert.title} ${alert.description}".lowercase()
+    return when (selectedCategory) {
+        "Tránsito" -> "choque" in normalized ||
+            "tránsito" in normalized ||
+            "transito" in normalized ||
+            "veh" in normalized
+        "Vía pública" -> "bache" in normalized ||
+            "vía" in normalized ||
+            "via" in normalized ||
+            "bloque" in normalized ||
+            "cerrada" in normalized ||
+            "residuo" in normalized ||
+            "basura" in normalized
+        else -> alert.category.equals(selectedCategory, ignoreCase = true) ||
+            alert.title.equals(selectedCategory, ignoreCase = true)
     }
 }
 

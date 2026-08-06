@@ -8,7 +8,13 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.alertasurbanas.ui.theme.UrbanColors
+import org.maplibre.android.geometry.LatLng
 import java.util.Calendar
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 data class AIRecommendationResult(
     val title: String,
@@ -41,11 +47,25 @@ data class AIRiskSummary(
 )
 
 object AIRecommendationEngine {
-    fun analyze(alerts: List<UrbanAlert>): AIRiskSummary {
-        if (alerts.isEmpty()) {
+    fun analyze(
+        alerts: List<UrbanAlert>,
+        userLocation: LatLng? = null,
+        radiusMeters: Double = 8_000.0
+    ): AIRiskSummary {
+        val analyzedAlerts = userLocation?.let { origin ->
+            alerts.filter { alert ->
+                distanceMeters(origin, LatLng(alert.latitude, alert.longitude)) <= radiusMeters
+            }
+        } ?: alerts
+
+        if (analyzedAlerts.isEmpty()) {
             return AIRiskSummary(
-                title = "Riesgo bajo en tu zona",
-                description = "No hay reportes recientes suficientes para detectar patrones de riesgo.",
+                title = if (userLocation == null) "Esperando ubicación" else "Sin zonas de riesgo cercanas",
+                description = if (userLocation == null) {
+                    "Esperando tu ubicación actual para analizar reportes cercanos."
+                } else {
+                    "No hay reportes validados cercanos a tu ubicación actual."
+                },
                 analyzedZones = 0,
                 highRiskZones = 0,
                 mediumRiskZones = 0,
@@ -53,8 +73,12 @@ object AIRecommendationEngine {
                 zones = emptyList(),
                 recommendations = listOf(
                     AIRecommendationResult(
-                        title = "Mantente atento a nuevas alertas",
-                        description = "La IA necesita más reportes para generar predicciones más precisas.",
+                        title = if (userLocation == null) "Activa la ubicación" else "Zona sin reportes relevantes",
+                        description = if (userLocation == null) {
+                            "Permite el acceso a ubicación para que la IA pueda analizar riesgos en tiempo real."
+                        } else {
+                            "No se encontraron reportes validados cerca. Continúa usando el mapa para monitorear cambios."
+                        },
                         label = "Datos insuficientes",
                         color = UrbanColors.Primary,
                         icon = Icons.Outlined.Lightbulb
@@ -63,31 +87,23 @@ object AIRecommendationEngine {
             )
         }
 
-        val highUrgencyCount = alerts.count { it.urgency == "Alta" }
-        val mediumUrgencyCount = alerts.count { it.urgency == "Media" }
-        val dominantCategory = alerts
+        val highUrgencyCount = analyzedAlerts.count { it.urgency == "Alta" }
+        val mediumUrgencyCount = analyzedAlerts.count { it.urgency == "Media" }
+        val dominantCategory = analyzedAlerts
             .groupingBy { it.category }
             .eachCount()
             .maxByOrNull { it.value }
             ?.key
             ?: "alertas"
 
-        val zoneGroups = alerts.groupBy { alert ->
+        val zoneGroups = analyzedAlerts.groupBy { alert ->
             "${(alert.latitude * 100).toInt()}-${(alert.longitude * 100).toInt()}"
         }
 
         val zoneData = zoneGroups.map { (zoneId, group) ->
-            val score = group.sumOf { alert ->
-                when (alert.urgency) {
-                    "Alta" -> 3
-                    "Media" -> 2
-                    else -> 1
-                }
-            }
-
             val riskLevel = when {
-                score >= 5 -> "Alta"
-                score >= 3 -> "Media"
+                group.any { it.urgency == "Alta" } -> "Alta"
+                group.any { it.urgency == "Media" } -> "Media"
                 else -> "Baja"
             }
 
@@ -175,7 +191,7 @@ object AIRecommendationEngine {
 
         return AIRiskSummary(
             title = riskTitle,
-            description = "Se analizaron ${alerts.size} reportes, urgencias, categorías y concentración por zona.",
+            description = "Se analizaron ${analyzedAlerts.size} reportes validados cercanos a tu ubicación actual.",
             analyzedZones = zoneGroups.size,
             highRiskZones = highRiskZones,
             mediumRiskZones = mediumRiskZones,
@@ -189,5 +205,17 @@ object AIRecommendationEngine {
             },
             recommendations = recommendations
         )
+    }
+
+    private fun distanceMeters(a: LatLng, b: LatLng): Double {
+        val earthRadiusMeters = 6_371_000.0
+        val dLat = Math.toRadians(b.latitude - a.latitude)
+        val dLon = Math.toRadians(b.longitude - a.longitude)
+        val lat1 = Math.toRadians(a.latitude)
+        val lat2 = Math.toRadians(b.latitude)
+        val value = sin(dLat / 2).pow(2) +
+            sin(dLon / 2).pow(2) * cos(lat1) * cos(lat2)
+
+        return 2 * earthRadiusMeters * atan2(sqrt(value), sqrt(1 - value))
     }
 }

@@ -44,6 +44,9 @@ class ReportIn(BaseModel):
 
 class AIRequest(BaseModel):
     reports: list[ReportIn] = []
+    userLatitude: float | None = None
+    userLongitude: float | None = None
+    analysisRadiusMeters: float = 15000.0
 
 
 class AlertRecommendationRequest(BaseModel):
@@ -142,6 +145,15 @@ def normalize_urgency(value: str) -> str:
     return "Media"
 
 
+def urgency_to_risk_label(value: str) -> RiskLabel:
+    urgency = normalize_urgency(value)
+    if urgency == "Alta":
+        return "Riesgo alto"
+    if urgency == "Media":
+        return "Riesgo medio"
+    return "Riesgo bajo"
+
+
 def group_zone_key(report: ReportIn) -> str:
     if report.latitude is None or report.longitude is None:
         return "sin-ubicacion"
@@ -232,10 +244,20 @@ def predict_report_risk(model, report: ReportIn, reports: list[ReportIn]) -> Ris
     return RISK_LABELS.get(prediction, "Riesgo medio")
 
 
-def make_empty_summary(model_available: bool) -> AISummaryOut:
+def make_empty_summary(
+    model_available: bool,
+    has_user_location: bool = False,
+    radius_meters: float = 15000.0,
+) -> AISummaryOut:
+    radius_km = round(radius_meters / 1000, 1)
+
     return AISummaryOut(
-        title="Riesgo bajo en tu zona",
-        description="Todavía no hay reportes suficientes para detectar patrones de riesgo.",
+        title="Sin zonas de riesgo cercanas" if has_user_location else "Esperando ubicación",
+        description=(
+            f"No hay reportes validados dentro de un rango aproximado de {radius_km} km alrededor de tu ubicación actual."
+            if has_user_location
+            else "La IA necesita tu ubicación actual para analizar zonas cercanas en tiempo real."
+        ),
         analyzedZones=0,
         highRiskZones=0,
         mediumRiskZones=0,
@@ -245,13 +267,45 @@ def make_empty_summary(model_available: bool) -> AISummaryOut:
         zones=[],
         recommendations=[
             AIRecommendationOut(
-                title="Genera más reportes para mejorar la IA",
-                description="La red neuronal necesita datos reales de la aplicación para entregar recomendaciones más precisas.",
+                title="Sin reportes cercanos validados" if has_user_location else "Activa la ubicación",
+                description=(
+                    "Cuando se validen reportes cerca de ti, esta sección mostrará patrones, zonas y recomendaciones útiles."
+                    if has_user_location
+                    else "Permite el acceso a ubicación para que la IA no analice reportes lejanos."
+                ),
                 label="Datos insuficientes",
                 colorKey="primary",
                 iconKey="lightbulb",
             )
         ],
+    )
+
+
+def sort_zones_for_user(
+    zones: list[AIRiskZoneOut],
+    user_latitude: float | None,
+    user_longitude: float | None,
+) -> list[AIRiskZoneOut]:
+    risk_weight = {"Alta": 3, "Media": 2, "Baja": 1}
+
+    if user_latitude is None or user_longitude is None:
+        return sorted(
+            zones,
+            key=lambda zone: risk_weight[zone.riskLevel],
+            reverse=True,
+        )
+
+    return sorted(
+        zones,
+        key=lambda zone: (
+            haversine_meters(
+                user_latitude,
+                user_longitude,
+                zone.latitude,
+                zone.longitude,
+            ),
+            -risk_weight[zone.riskLevel],
+        ),
     )
 
 
@@ -266,24 +320,42 @@ def health():
 
 @app.post("/recommendations", response_model=AISummaryOut)
 def recommendations(request: AIRequest):
+    has_user_location = request.userLatitude is not None and request.userLongitude is not None
     valid_reports = [
         report
         for report in request.reports
         if report.status.lower() == "approved"
+        and report.latitude is not None
+        and report.longitude is not None
+        and (
+            request.userLatitude is None
+            or request.userLongitude is None
+            or haversine_meters(
+                request.userLatitude,
+                request.userLongitude,
+                report.latitude,
+                report.longitude,
+            )
+            <= request.analysisRadiusMeters
+        )
     ]
 
     model = load_model()
     model_available = model is not None
 
     if not valid_reports:
-        return make_empty_summary(model_available)
+        return make_empty_summary(
+            model_available=model_available,
+            has_user_location=has_user_location,
+            radius_meters=request.analysisRadiusMeters,
+        )
 
     predictions = [
         (report, predict_report_risk(model, report, valid_reports))
         for report in valid_reports
     ]
 
-    risk_counter = Counter(label for _, label in predictions)
+    risk_counter = Counter(urgency_to_risk_label(report.urgency) for report in valid_reports)
     category_counter = Counter(normalize_type(report.type) for report, _ in predictions)
 
     zones: dict[str, list[tuple[ReportIn, RiskLabel]]] = defaultdict(list)
@@ -295,7 +367,16 @@ def recommendations(request: AIRequest):
 
     for zone_id, values in zones.items():
         labels = [label for _, label in values]
-        strongest = max(labels, key=lambda label: LABEL_PRIORITY[label])
+        predicted_strongest = max(labels, key=lambda label: LABEL_PRIORITY[label])
+        actual_strongest = max(
+            (urgency_to_risk_label(report.urgency) for report, _ in values),
+            key=lambda label: LABEL_PRIORITY[label],
+        )
+        strongest = min(
+            predicted_strongest,
+            actual_strongest,
+            key=lambda label: LABEL_PRIORITY[label],
+        )
         zone_levels.append(strongest)
         reports_in_zone = [report for report, _ in values]
         reports_with_location = [
@@ -343,28 +424,42 @@ def recommendations(request: AIRequest):
         title = "Riesgo bajo en tu zona"
 
     dominant_category = category_counter.most_common(1)[0][0]
+    dominant_category_count = category_counter[dominant_category]
+    urgency_counter = Counter(normalize_urgency(report.urgency) for report in valid_reports)
+    dominant_urgency = urgency_counter.most_common(1)[0][0]
+    dominant_urgency_count = urgency_counter[dominant_urgency]
 
     recommendations_out = [
         AIRecommendationOut(
-            title="Evita zonas con mayor concentración de riesgo",
-            description=f"La red neuronal detectó {risk_counter['Riesgo alto']} reporte(s) de riesgo alto y {risk_counter['Riesgo medio']} de riesgo medio.",
+            title="Resumen de riesgo cercano",
+            description=(
+                f"En tu rango cercano hay {len(valid_reports)} reporte(s) validado(s): "
+                f"{risk_counter['Riesgo alto']} alta(s), {risk_counter['Riesgo medio']} media(s) "
+                f"y {risk_counter['Riesgo bajo']} baja(s)."
+            ),
             label="Predicción IA",
             colorKey="high" if risk_counter["Riesgo alto"] else "medium",
             iconKey="warning",
         ),
         AIRecommendationOut(
-            title="Prioriza rutas con menos reportes cercanos",
-            description="Antes de iniciar un recorrido, compara las rutas y elige la que tenga menor cantidad de incidentes activos.",
-            label="Ruta sugerida",
+            title=f"Tipo más repetido: {dominant_category}",
+            description=(
+                f"Este tipo aparece {dominant_category_count} vez/veces dentro del área analizada. "
+                "Úsalo como señal para revisar esas calles antes de iniciar una ruta."
+            ),
+            label="Patrón de categoría",
             colorKey="primary",
-            iconKey="route",
+            iconKey="graph",
         ),
         AIRecommendationOut(
-            title=f"Patrón recurrente: {dominant_category}",
-            description="El modelo encontró que este tipo de incidente aparece con mayor frecuencia en los reportes recientes.",
+            title=f"Urgencia más común: {dominant_urgency}",
+            description=(
+                f"La urgencia {dominant_urgency.lower()} se repite {dominant_urgency_count} vez/veces. "
+                f"Se detectaron {len(zones_out)} zona(s) con reportes alrededor de tu ubicación."
+            ),
             label="Análisis de datos",
             colorKey="terracotta",
-            iconKey="graph",
+            iconKey="lightbulb",
         ),
     ]
 
@@ -377,11 +472,7 @@ def recommendations(request: AIRequest):
         lowRiskZones=low_zones,
         modelAvailable=model_available,
         generatedAt=datetime.now().isoformat(timespec="seconds"),
-        zones=sorted(
-            zones_out,
-            key=lambda zone: {"Alta": 3, "Media": 2, "Baja": 1}[zone.riskLevel],
-            reverse=True,
-        ),
+        zones=sort_zones_for_user(zones_out, request.userLatitude, request.userLongitude),
         recommendations=recommendations_out,
     )
 

@@ -4,13 +4,14 @@ import com.example.alertasurbanas.data.AIRecommendationEngine
 import com.example.alertasurbanas.data.AIRecommendationApi
 import com.example.alertasurbanas.data.AIRecommendationResult
 import com.example.alertasurbanas.data.AIRiskZone
-import com.example.alertasurbanas.data.AlertRepository
 import com.example.alertasurbanas.data.MapDefaults
 import com.example.alertasurbanas.data.MapRiskZone
 import com.example.alertasurbanas.data.MapSearchService
+import com.example.alertasurbanas.data.ReportRepository
 import com.example.alertasurbanas.data.UrbanAlert
 import com.example.alertasurbanas.model.UrbanReport
 import com.example.alertasurbanas.ui.screens.shared.MapTilerMap
+import com.example.alertasurbanas.ui.screens.shared.rememberLiveUserLocation
 import com.example.alertasurbanas.ui.theme.UrbanColors
 
 import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
@@ -46,6 +47,7 @@ private val AIBackground = UrbanColors.Background
 private val AIPrimary = UrbanColors.Primary
 private val AIText = UrbanColors.TextPrimary
 private val AIOrange = UrbanColors.Terracotta
+private const val AI_ANALYSIS_RADIUS_METERS = 15_000.0
 
 private data class SaferStreetSuggestion(
     val name: String,
@@ -59,10 +61,49 @@ fun AIRecommendationsScreen(
     onBack: () -> Unit = {},
     onNavigate: (String) -> Unit = {},
     reports: List<UrbanReport> = emptyList(),
-    alerts: List<UrbanAlert> = AlertRepository.publicAlerts
+    alerts: List<UrbanAlert> = emptyList()
 ) {
-    val liveAlerts = remember(reports, alerts) {
-        if (reports.isNotEmpty()) reports.toAIAlerts() else alerts
+    val currentLocation by rememberLiveUserLocation(
+        autoRequestPermission = true,
+        intervalMillis = 6_000L,
+        minUpdateDistanceMeters = 6f
+    )
+
+    val reportRepository = remember { ReportRepository() }
+    val approvedReportsFlow = remember { reportRepository.observeApprovedReports() }
+    val realtimeApprovedReports by approvedReportsFlow.collectAsState(initial = reports)
+
+    val approvedReports = remember(realtimeApprovedReports, reports) {
+        val source = if (realtimeApprovedReports.isNotEmpty()) realtimeApprovedReports else reports
+        source.filter { report ->
+            report.status == "approved" &&
+                report.latitude != null &&
+                report.longitude != null
+        }
+    }
+
+    val liveAlerts = remember(approvedReports, alerts) {
+        if (approvedReports.isNotEmpty()) approvedReports.toAIAlerts() else alerts
+    }
+
+    val analysisAlerts = remember(liveAlerts, currentLocation) {
+        val origin = currentLocation ?: return@remember emptyList()
+        liveAlerts.filter { alert ->
+            distanceMeters(
+                a = origin,
+                b = LatLng(alert.latitude, alert.longitude)
+            ) <= AI_ANALYSIS_RADIUS_METERS
+        }
+    }
+
+    val analysisReports = remember(approvedReports, currentLocation) {
+        val origin = currentLocation ?: return@remember emptyList()
+        approvedReports.filter { report ->
+            distanceMeters(
+                a = origin,
+                b = LatLng(report.latitude ?: 0.0, report.longitude ?: 0.0)
+            ) <= AI_ANALYSIS_RADIUS_METERS
+        }
     }
 
     var isUsingRemoteAI by rememberSaveable {
@@ -73,8 +114,14 @@ fun AIRecommendationsScreen(
         mutableStateOf(false)
     }
 
-    var riskSummary by remember(liveAlerts) {
-        mutableStateOf(AIRecommendationEngine.analyze(liveAlerts))
+    var riskSummary by remember(analysisAlerts, currentLocation) {
+        mutableStateOf(
+            AIRecommendationEngine.analyze(
+                alerts = analysisAlerts,
+                userLocation = currentLocation,
+                radiusMeters = AI_ANALYSIS_RADIUS_METERS
+            )
+        )
     }
 
     var selectedZoneId by rememberSaveable {
@@ -83,40 +130,82 @@ fun AIRecommendationsScreen(
 
     val selectedZone = remember(riskSummary.zones, selectedZoneId) {
         riskSummary.zones.firstOrNull { it.id == selectedZoneId }
+    }
+
+    val streetReferenceZone = remember(selectedZone, riskSummary.zones, currentLocation, analysisAlerts) {
+        selectedZone
             ?: riskSummary.zones.firstOrNull()
+            ?: currentLocation?.let { location ->
+                AIRiskZone(
+                    id = "current-user-location",
+                    title = "Tu ubicación actual",
+                    riskLevel = highestRiskLevel(analysisAlerts),
+                    dominantCategory = mostRepeatedCategory(analysisAlerts),
+                    reportCount = analysisAlerts.size,
+                    latitude = location.latitude,
+                    longitude = location.longitude,
+                    recommendation = if (analysisAlerts.isEmpty()) {
+                        "No hay reportes validados dentro del rango cercano."
+                    } else {
+                        "Se usan las alertas cercanas para buscar calles con menor concentración de reportes."
+                    }
+                )
+            }
     }
 
     var saferStreets by remember {
         mutableStateOf<List<SaferStreetSuggestion>>(emptyList())
     }
 
-    LaunchedEffect(reports) {
-        if (reports.isEmpty()) {
-            riskSummary = AIRecommendationEngine.analyze(liveAlerts)
+    LaunchedEffect(analysisReports, analysisAlerts, currentLocation) {
+        if (currentLocation == null) {
+            riskSummary = AIRecommendationEngine.analyze(emptyList(), currentLocation)
+            isUsingRemoteAI = false
+            return@LaunchedEffect
+        }
+
+        if (analysisReports.isEmpty()) {
+            riskSummary = AIRecommendationEngine.analyze(
+                alerts = emptyList(),
+                userLocation = currentLocation,
+                radiusMeters = AI_ANALYSIS_RADIUS_METERS
+            )
             isUsingRemoteAI = false
             return@LaunchedEffect
         }
 
         isLoadingRemoteAI = true
-        val remoteSummary = AIRecommendationApi.getRecommendations(reports)
+        val remoteSummary = AIRecommendationApi.getRecommendations(
+            reports = analysisReports,
+            userLocation = currentLocation,
+            analysisRadiusMeters = AI_ANALYSIS_RADIUS_METERS
+        )
         isLoadingRemoteAI = false
 
         if (remoteSummary != null) {
-            riskSummary = remoteSummary
+            riskSummary = sanitizeSummaryForCurrentArea(
+                summary = remoteSummary,
+                alerts = analysisAlerts,
+                userLocation = currentLocation
+            )
             isUsingRemoteAI = true
         } else {
-            riskSummary = AIRecommendationEngine.analyze(liveAlerts)
+            riskSummary = AIRecommendationEngine.analyze(
+                alerts = analysisAlerts,
+                userLocation = currentLocation,
+                radiusMeters = AI_ANALYSIS_RADIUS_METERS
+            )
             isUsingRemoteAI = false
         }
     }
 
-    LaunchedEffect(selectedZone?.id, liveAlerts) {
-        val zone = selectedZone ?: return@LaunchedEffect
+    LaunchedEffect(streetReferenceZone?.id, analysisAlerts) {
+        val zone = streetReferenceZone ?: return@LaunchedEffect
         saferStreets = emptyList()
 
         saferStreets = findSaferNearbyStreets(
             zone = zone,
-            alerts = liveAlerts
+            alerts = analysisAlerts
         )
     }
 
@@ -168,9 +257,12 @@ fun AIRecommendationsScreen(
             item {
                 AIRiskMapCard(
                     zones = riskSummary.zones,
-                    alerts = liveAlerts,
+                    alerts = analysisAlerts,
                     selectedZone = selectedZone,
+                    streetReferenceZone = streetReferenceZone,
+                    hasLocation = currentLocation != null,
                     saferStreets = saferStreets,
+                    currentLocation = currentLocation,
                     onSelectZone = { zone ->
                         selectedZoneId = zone.id
                     },
@@ -288,7 +380,10 @@ private fun AIRiskMapCard(
     zones: List<AIRiskZone>,
     alerts: List<UrbanAlert>,
     selectedZone: AIRiskZone?,
+    streetReferenceZone: AIRiskZone?,
     saferStreets: List<SaferStreetSuggestion>,
+    currentLocation: LatLng?,
+    hasLocation: Boolean,
     onSelectZone: (AIRiskZone) -> Unit,
     analyzedZones: Int,
     highRiskZones: Int,
@@ -312,11 +407,7 @@ private fun AIRiskMapCard(
         }
     }
 
-    val mapCenter = selectedZone?.let {
-        LatLng(it.latitude, it.longitude)
-    } ?: zones.firstOrNull()?.let {
-        LatLng(it.latitude, it.longitude)
-    } ?: MapDefaults.UtcjLocation
+    val mapCenter = currentLocation ?: MapDefaults.UtcjLocation
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -338,7 +429,7 @@ private fun AIRiskMapCard(
                     center = mapCenter,
                     zoom = 14.0,
                     alerts = zoneAlerts,
-                    currentLocation = MapDefaults.UtcjLocation,
+                    currentLocation = currentLocation,
                     riskZones = zones.map { zone ->
                         MapRiskZone(
                             id = zone.id,
@@ -401,23 +492,32 @@ private fun AIRiskMapCard(
 
                 Column {
                     Text(
-                    text = "$analyzedZones zonas analizadas",
+                        text = when {
+                            !hasLocation -> "Esperando ubicación"
+                            analyzedZones == 0 -> "Sin zonas cercanas"
+                            else -> "$analyzedZones zonas analizadas"
+                        },
                         color = AIText,
                         fontWeight = FontWeight.Bold
                     )
 
                     Text(
-                        text = "$highRiskZones alta(s), $mediumRiskZones media(s), $lowRiskZones baja(s) · actualizado ahora",
+                        text = when {
+                            !hasLocation -> "Permite la ubicación para analizar tu zona real"
+                            analyzedZones == 0 -> "No hay reportes validados dentro del rango cercano"
+                            else -> "$highRiskZones alta(s), $mediumRiskZones media(s), $lowRiskZones baja(s) · actualizado ahora"
+                        },
                         color = AIText.copy(alpha = 0.6f),
                         fontSize = 11.sp
                     )
                 }
             }
 
-            selectedZone?.let { zone ->
+            streetReferenceZone?.let { zone ->
                 Divider(color = UrbanColors.Border.copy(alpha = 0.7f))
                 AISelectedZoneCard(
                     zone = zone,
+                    isCurrentLocationReference = zone.id == "current-user-location",
                     saferStreets = saferStreets
                 )
             }
@@ -428,6 +528,7 @@ private fun AIRiskMapCard(
 @Composable
 private fun AISelectedZoneCard(
     zone: AIRiskZone,
+    isCurrentLocationReference: Boolean = false,
     saferStreets: List<SaferStreetSuggestion>
 ) {
     Column(
@@ -451,7 +552,7 @@ private fun AISelectedZoneCard(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = zone.title,
+                    text = if (isCurrentLocationReference) "Calles cercanas a tu ubicación" else zone.title,
                     color = AIText,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
@@ -463,7 +564,11 @@ private fun AISelectedZoneCard(
                     lineHeight = 17.sp
                 )
                 Text(
-                    text = "${zone.reportCount} reporte(s) · ${zone.dominantCategory}",
+                    text = if (isCurrentLocationReference) {
+                        "${zone.reportCount} reporte(s) en el rango · ${zone.dominantCategory}"
+                    } else {
+                        "${zone.reportCount} reporte(s) · ${zone.dominantCategory}"
+                    },
                     color = riskColor(zone.riskLevel),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
@@ -547,7 +652,6 @@ private fun AIRecommendationCard(
     recommendation: AIRecommendationResult
 ) {
     Card(
-        onClick = {},
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White
@@ -598,12 +702,6 @@ private fun AIRecommendationCard(
                     fontWeight = FontWeight.Bold
                 )
             }
-
-            Icon(
-                imageVector = Icons.Outlined.ChevronRight,
-                contentDescription = null,
-                tint = AIText.copy(alpha = 0.55f)
-            )
         }
     }
 }
@@ -663,6 +761,64 @@ private fun riskColor(riskLevel: String): Color {
         "Media" -> UrbanColors.MediumUrgency
         else -> UrbanColors.Primary
     }
+}
+
+private fun sanitizeSummaryForCurrentArea(
+    summary: com.example.alertasurbanas.data.AIRiskSummary,
+    alerts: List<UrbanAlert>,
+    userLocation: LatLng?
+): com.example.alertasurbanas.data.AIRiskSummary {
+    if (userLocation == null) {
+        return AIRecommendationEngine.analyze(emptyList(), null)
+    }
+
+    if (alerts.isEmpty()) {
+        return AIRecommendationEngine.analyze(
+            alerts = emptyList(),
+            userLocation = userLocation,
+            radiusMeters = AI_ANALYSIS_RADIUS_METERS
+        )
+    }
+
+    val highestActualRisk = highestRiskLevel(alerts)
+    val sanitizedZones = summary.zones.map { zone ->
+        zone.copy(
+            riskLevel = clampRiskLevel(zone.riskLevel, highestActualRisk),
+            title = "Zona ${clampRiskLevel(zone.riskLevel, highestActualRisk).lowercase()} · ${zone.dominantCategory}"
+        )
+    }
+
+    val highZones = sanitizedZones.count { it.riskLevel == "Alta" }
+    val mediumZones = sanitizedZones.count { it.riskLevel == "Media" }
+    val lowZones = sanitizedZones.count { it.riskLevel == "Baja" }
+
+    val title = when (highestActualRisk) {
+        "Alta" -> "Riesgo alto en tu zona"
+        "Media" -> "Riesgo moderado en tu zona"
+        else -> "Riesgo bajo en tu zona"
+    }
+
+    return summary.copy(
+        title = title,
+        description = "Se analizaron ${alerts.size} reporte(s) validado(s) dentro de 15 km de tu ubicación actual.",
+        highRiskZones = highZones,
+        mediumRiskZones = mediumZones,
+        lowRiskZones = lowZones,
+        zones = sanitizedZones
+    )
+}
+
+private fun clampRiskLevel(value: String, maxRiskLevel: String): String {
+    return if (riskPriority(value) > riskPriority(maxRiskLevel)) maxRiskLevel else value
+}
+
+private fun mostRepeatedCategory(alerts: List<UrbanAlert>): String {
+    return alerts
+        .groupingBy { it.category.ifBlank { "Sin reportes cercanos" } }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+        ?: "Sin reportes cercanos"
 }
 
 private suspend fun findSaferNearbyStreets(

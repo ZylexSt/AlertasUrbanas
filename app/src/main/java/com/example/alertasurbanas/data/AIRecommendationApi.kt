@@ -15,6 +15,7 @@ import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import org.maplibre.android.geometry.LatLng
 
 object AIRecommendationApi {
     suspend fun getAlertRecommendation(
@@ -67,7 +68,11 @@ object AIRecommendationApi {
         }.getOrNull()
     }
 
-    suspend fun getRecommendations(reports: List<UrbanReport>): AIRiskSummary? = withContext(Dispatchers.IO) {
+    suspend fun getRecommendations(
+        reports: List<UrbanReport>,
+        userLocation: LatLng? = null,
+        analysisRadiusMeters: Double = 8_000.0
+    ): AIRiskSummary? = withContext(Dispatchers.IO) {
         runCatching {
             val baseUrl = BuildConfig.AI_API_BASE_URL.trimEnd('/')
             if (baseUrl.isBlank()) return@withContext null
@@ -82,6 +87,13 @@ object AIRecommendationApi {
             }
 
             val payload = JSONObject().apply {
+                put("analysisRadiusMeters", analysisRadiusMeters)
+
+                userLocation?.let { location ->
+                    put("userLatitude", location.latitude)
+                    put("userLongitude", location.longitude)
+                }
+
                 put(
                     "reports",
                     JSONArray().apply {

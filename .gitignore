@@ -13,10 +13,6 @@
 .externalNativeBuild
 .cxx
 local.properties
-ml/.venv/
-ml/__pycache__/
-ml/data/
-ml/model/
 serviceAccountKey.json
 scripts/serviceAccountKey.json
 backups/

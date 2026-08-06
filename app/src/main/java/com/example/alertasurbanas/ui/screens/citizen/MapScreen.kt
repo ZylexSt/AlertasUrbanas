@@ -65,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -91,6 +92,7 @@ import com.example.alertasurbanas.data.MapRouteService
 import com.example.alertasurbanas.data.MapSearchResult
 import com.example.alertasurbanas.data.MapSearchService
 import com.example.alertasurbanas.data.UrbanAlert
+import com.example.alertasurbanas.ui.screens.shared.rememberLiveUserLocation
 import com.example.alertasurbanas.ui.screens.shared.MapTilerMap
 import com.example.alertasurbanas.ui.screens.shared.UrbanBottomBar
 import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
@@ -113,6 +115,30 @@ private val MapHigh = UrbanColors.HighUrgency
 private val MapMedium = UrbanColors.MediumUrgency
 private val MapLow = UrbanColors.Primary
 
+private object ActiveRouteSession {
+    var routePoints: List<LatLng> = emptyList()
+    var routeResult: MapRouteResult? = null
+    var routeResults: List<MapRouteResult> = emptyList()
+    var selectedRouteIndex: Int = 0
+    var originQuery: String = MapDefaults.UtcjAddress
+    var originCoordinate: LatLng? = MapDefaults.UtcjLocation
+    var destinationCoordinate: LatLng? = null
+    var destinationName: String = ""
+    var started: Boolean = false
+
+    fun clear() {
+        routePoints = emptyList()
+        routeResult = null
+        routeResults = emptyList()
+        selectedRouteIndex = 0
+        originQuery = MapDefaults.UtcjAddress
+        originCoordinate = MapDefaults.UtcjLocation
+        destinationCoordinate = null
+        destinationName = ""
+        started = false
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(
@@ -127,7 +153,15 @@ fun MapScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val liveUserLocation by rememberLiveUserLocation(
+        autoRequestPermission = true,
+        intervalMillis = 4_000L,
+        minUpdateDistanceMeters = 4f
+    )
     val carMapSyncRepository = remember { CarMapSyncRepository() }
+    val syncedMapState by carMapSyncRepository.observeRoute().collectAsState(
+        initial = com.example.alertasurbanas.data.CarSyncedRoute()
+    )
 
     var searchQuery by remember { mutableStateOf("") }
     var searchSuggestions by remember { mutableStateOf<List<MapSearchResult>>(emptyList()) }
@@ -140,18 +174,20 @@ fun MapScreen(
     var showFilters by remember { mutableStateOf(false) }
     var mapCenter by remember { mutableStateOf(MapDefaults.UtcjLocation) }
     var mapZoom by remember { mutableStateOf(13.0) }
-    var currentLocation by remember { mutableStateOf<LatLng?>(MapDefaults.UtcjLocation) }
-    var routePoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
-    var routeResult by remember { mutableStateOf<MapRouteResult?>(null) }
-    var routeResults by remember { mutableStateOf<List<MapRouteResult>>(emptyList()) }
-    var selectedRouteIndex by remember { mutableStateOf(0) }
+    var currentLocation by remember { mutableStateOf<LatLng?>(null) }
+    var hasCenteredOnLiveLocation by remember { mutableStateOf(false) }
+    var routePoints by remember { mutableStateOf(ActiveRouteSession.routePoints) }
+    var routeResult by remember { mutableStateOf(ActiveRouteSession.routeResult) }
+    var routeResults by remember { mutableStateOf(ActiveRouteSession.routeResults) }
+    var selectedRouteIndex by remember { mutableStateOf(ActiveRouteSession.selectedRouteIndex) }
     var isRouteLoading by remember { mutableStateOf(false) }
-    var routeOriginQuery by remember { mutableStateOf(MapDefaults.UtcjAddress) }
+    var routeOriginQuery by remember { mutableStateOf(ActiveRouteSession.originQuery) }
     var routeOriginSuggestions by remember { mutableStateOf<List<MapSearchResult>>(emptyList()) }
     var isRouteOriginSearchActive by remember { mutableStateOf(false) }
-    var routeOriginCoordinate by remember { mutableStateOf<LatLng?>(MapDefaults.UtcjLocation) }
-    var routeDestinationCoordinate by remember { mutableStateOf<LatLng?>(null) }
-    var routeDestinationName by remember { mutableStateOf("") }
+    var routeOriginCoordinate by remember { mutableStateOf<LatLng?>(ActiveRouteSession.originCoordinate) }
+    var routeDestinationCoordinate by remember { mutableStateOf<LatLng?>(ActiveRouteSession.destinationCoordinate) }
+    var routeDestinationName by remember { mutableStateOf(ActiveRouteSession.destinationName) }
+    var routeStarted by remember { mutableStateOf(ActiveRouteSession.started) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val distanceOrigin = currentLocation ?: mapCenter
@@ -176,8 +212,20 @@ fun MapScreen(
             haversineMeters(distanceOrigin, LatLng(alert.latitude, alert.longitude))
         }
     val filteredAlerts = allAlerts.filter { alert ->
-        (selectedCategory == "Todas" || alert.category == selectedCategory) &&
+        matchesCategoryFilter(alert, selectedCategory) &&
             (selectedUrgency == "Todas" || alert.urgency == selectedUrgency)
+    }
+
+    fun saveRouteSession() {
+        ActiveRouteSession.routePoints = routePoints
+        ActiveRouteSession.routeResult = routeResult
+        ActiveRouteSession.routeResults = routeResults
+        ActiveRouteSession.selectedRouteIndex = selectedRouteIndex
+        ActiveRouteSession.originQuery = routeOriginQuery
+        ActiveRouteSession.originCoordinate = routeOriginCoordinate
+        ActiveRouteSession.destinationCoordinate = routeDestinationCoordinate
+        ActiveRouteSession.destinationName = routeDestinationName
+        ActiveRouteSession.started = routeStarted
     }
 
     fun clearCarRouteSafely() {
@@ -204,7 +252,22 @@ fun MapScreen(
         selectedRouteIndex = 0
         routeDestinationCoordinate = null
         routeDestinationName = ""
+        routeStarted = false
+        ActiveRouteSession.clear()
         clearCarRouteSafely()
+    }
+
+    fun publishFiltersSafely(category: String = selectedCategory, urgency: String = selectedUrgency) {
+        scope.launch {
+            try {
+                carMapSyncRepository.publishFilters(
+                    selectedCategory = category,
+                    selectedUrgency = urgency,
+                    source = "mobile"
+                )
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun moveToSearchResult(result: MapSearchResult) {
@@ -305,6 +368,26 @@ fun MapScreen(
         }
     }
 
+    LaunchedEffect(liveUserLocation) {
+        val coordinate = liveUserLocation ?: return@LaunchedEffect
+        currentLocation = coordinate
+
+        if (!hasCenteredOnLiveLocation) {
+            mapCenter = coordinate
+            mapZoom = 15.5
+            hasCenteredOnLiveLocation = true
+        }
+
+        if (
+            routeOriginQuery.equals("Mi ubicación actual", ignoreCase = true) ||
+            routeOriginQuery.equals("Mi ubicacion actual", ignoreCase = true) ||
+            (!routeStarted && routeOriginQuery == MapDefaults.UtcjAddress)
+        ) {
+            routeOriginQuery = "Mi ubicación actual"
+            routeOriginCoordinate = coordinate
+        }
+    }
+
     LaunchedEffect(centerOnUserLocationOnOpen) {
         if (centerOnUserLocationOnOpen) {
             requestCurrentLocation()
@@ -374,23 +457,9 @@ fun MapScreen(
                 routePoints = results.first().points
                 routeDestinationCoordinate = destination
                 routeDestinationName = destinationName
+                routeStarted = false
                 mapCenter = destination
                 mapZoom = 14.5
-                try {
-                    carMapSyncRepository.publishRoute(
-                        routes = results,
-                        selectedRouteIndex = 0,
-                        origin = origin,
-                        destination = destination,
-                        destinationName = destinationName
-                    )
-                } catch (_: Exception) {
-                    Toast.makeText(
-                        context,
-                        "Ruta lista, pero no se pudo sincronizar con el auto.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
                 Toast.makeText(context, "Se encontraron ${results.size} ruta(s).", Toast.LENGTH_SHORT).show()
             } else if (evaluatedRoutes.isNotEmpty()) {
                 routePoints = emptyList()
@@ -455,6 +524,40 @@ fun MapScreen(
     LaunchedEffect(filteredAlerts, selectedAlert) {
         if (selectedAlert != null && filteredAlerts.none { it.id == selectedAlert?.id }) {
             selectedAlert = null
+        }
+    }
+
+    LaunchedEffect(syncedMapState.selectedCategory, syncedMapState.selectedUrgency) {
+        val syncedCategory = syncedMapState.selectedCategory.ifBlank { "Todas" }
+        val syncedUrgency = syncedMapState.selectedUrgency.ifBlank { "Todas" }
+
+        if (selectedCategory != syncedCategory) {
+            selectedCategory = syncedCategory
+            selectedAlert = null
+        }
+
+        if (selectedUrgency != syncedUrgency) {
+            selectedUrgency = syncedUrgency
+            selectedAlert = null
+        }
+    }
+
+    LaunchedEffect(syncedMapState.updatedAt, syncedMapState.routes.size) {
+        if (
+            syncedMapState.updatedAt > 0L &&
+            syncedMapState.routes.isEmpty() &&
+            syncedMapState.source == "automotive" &&
+            syncedMapState.syncType == "empty_route" &&
+            routeStarted
+        ) {
+            routePoints = emptyList()
+            routeResult = null
+            routeResults = emptyList()
+            selectedRouteIndex = 0
+            routeDestinationCoordinate = null
+            routeDestinationName = ""
+            routeStarted = false
+            ActiveRouteSession.clear()
         }
     }
 
@@ -604,25 +707,7 @@ fun MapScreen(
                         selectedRouteIndex = index
                         routeResult = routeResults.getOrNull(index)
                         routePoints = routeResults.getOrNull(index)?.points.orEmpty()
-                        val origin = routeOriginCoordinate ?: currentLocation ?: MapDefaults.UtcjLocation
-                        val destination = routeDestinationCoordinate ?: place.coordinate
-                        scope.launch {
-                            try {
-                                carMapSyncRepository.publishRoute(
-                                    routes = routeResults,
-                                    selectedRouteIndex = index,
-                                    origin = origin,
-                                    destination = destination,
-                                    destinationName = routeDestinationName.ifBlank { place.title }
-                                )
-                            } catch (_: Exception) {
-                                Toast.makeText(
-                                    context,
-                                    "Ruta seleccionada, pero no se pudo sincronizar con el auto.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
+                        routeStarted = false
                     },
                     onRouteClick = { calculateRoute(place.coordinate) },
                     onShowSelectedRoute = {
@@ -633,6 +718,8 @@ fun MapScreen(
                         val destinationName = routeDestinationName.ifBlank { place.title }
 
                         showSelectedPlaceCard = false
+                        routeStarted = true
+                        saveRouteSession()
 
                         if (routes.isNotEmpty()) {
                             scope.launch {
@@ -657,14 +744,23 @@ fun MapScreen(
                 )
             }
 
-            if (!showSelectedPlaceCard && routeResults.isNotEmpty()) {
+            if (!showSelectedPlaceCard && routeStarted && routeResults.isNotEmpty()) {
                 ActiveRouteSummaryCard(
                     route = routeResults.getOrNull(selectedRouteIndex) ?: routeResults.first(),
                     destinationName = routeDestinationName.ifBlank { selectedPlace?.title ?: "Destino seleccionado" },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(16.dp),
-                    onOpenDetails = { showSelectedPlaceCard = true },
+                    onOpenDetails = {
+                        if (selectedPlace == null && routeDestinationCoordinate != null) {
+                            selectedPlace = MapSearchResult(
+                                title = routeDestinationName.ifBlank { "Destino seleccionado" },
+                                subtitle = "Ruta activa",
+                                coordinate = routeDestinationCoordinate ?: MapDefaults.UtcjLocation
+                            )
+                        }
+                        showSelectedPlaceCard = true
+                    },
                     onCancelRoute = { cancelActiveRoute() }
                 )
             }
@@ -693,15 +789,18 @@ fun MapScreen(
                 onCategorySelected = {
                     selectedCategory = it
                     selectedAlert = null
+                    publishFiltersSafely(category = it)
                 },
                 onUrgencySelected = {
                     selectedUrgency = it
                     selectedAlert = null
+                    publishFiltersSafely(urgency = it)
                 },
                 onClearFilters = {
                     selectedCategory = "Todas"
                     selectedUrgency = "Todas"
                     selectedAlert = null
+                    publishFiltersSafely(category = "Todas", urgency = "Todas")
                 },
                 onApply = { showFilters = false }
             )
@@ -1372,7 +1471,7 @@ private fun SelectedPlaceCard(
                     text = when {
                         isRouteLoading -> "Calculando rutas..."
                         routeResults.isEmpty() -> "Ver rutas"
-                        else -> "Ver ruta seleccionada"
+                        else -> "Iniciar ruta"
                     },
                     color = Color.White,
                     fontWeight = FontWeight.Bold
@@ -1671,6 +1770,23 @@ private fun iconForCategory(category: String): ImageVector {
         normalized.contains("seguridad") || normalized.contains("riesgo") -> Icons.Outlined.Shield
         normalized == "alta" || normalized == "media" || normalized == "baja" -> Icons.Outlined.ReportProblem
         else -> Icons.Outlined.Traffic
+    }
+}
+
+private fun matchesCategoryFilter(alert: UrbanAlert, selectedCategory: String): Boolean {
+    if (selectedCategory == "Todas") return true
+
+    val normalized = "${alert.category} ${alert.title} ${alert.description}".lowercase()
+    return when (selectedCategory) {
+        "Vía pública" -> normalized.contains("bache") ||
+            normalized.contains("via") ||
+            normalized.contains("vía") ||
+            normalized.contains("bloque") ||
+            normalized.contains("cerrada") ||
+            normalized.contains("residuo") ||
+            normalized.contains("basura")
+        else -> alert.category.equals(selectedCategory, ignoreCase = true) ||
+            alert.title.equals(selectedCategory, ignoreCase = true)
     }
 }
 

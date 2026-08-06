@@ -2,6 +2,7 @@ package com.example.alertasurbanas.data
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -16,6 +17,10 @@ data class CarSyncedRoute(
     val destinationName: String = "",
     val routeSummaries: List<String> = emptyList(),
     val nearbyReports: List<Int> = emptyList(),
+    val selectedCategory: String = "Todas",
+    val selectedUrgency: String = "Todas",
+    val source: String = "",
+    val syncType: String = "",
     val updatedAt: Long = 0L
 )
 
@@ -85,11 +90,31 @@ class CarMapSyncRepository {
                 "source" to "mobile",
                 "syncType" to "active_route",
                 "updatedAt" to System.currentTimeMillis()
-            )
+            ),
+            SetOptions.merge()
         ).await()
     }
 
-    suspend fun clearRoute() {
+    suspend fun publishFilters(
+        selectedCategory: String,
+        selectedUrgency: String,
+        source: String = "mobile"
+    ) {
+        ensureSyncSession()
+
+        stateDocument.set(
+            mapOf(
+                "selectedCategory" to selectedCategory,
+                "selectedUrgency" to selectedUrgency,
+                "source" to source,
+                "syncType" to "filters",
+                "updatedAt" to System.currentTimeMillis()
+            ),
+            SetOptions.merge()
+        ).await()
+    }
+
+    suspend fun clearRoute(source: String = "mobile") {
         ensureSyncSession()
         stateDocument.set(
             mapOf(
@@ -98,10 +123,11 @@ class CarMapSyncRepository {
                 "destinationName" to "",
                 "routeSummaries" to emptyList<String>(),
                 "nearbyReports" to emptyList<Int>(),
-                "source" to "mobile",
+                "source" to source,
                 "syncType" to "empty_route",
                 "updatedAt" to System.currentTimeMillis()
-            )
+            ),
+            SetOptions.merge()
         ).await()
     }
 
@@ -147,6 +173,10 @@ private fun Map<String, Any>?.toCarSyncedRoute(): CarSyncedRoute {
         destinationName = this["destinationName"] as? String ?: "",
         routeSummaries = (this["routeSummaries"] as? List<*>)?.mapNotNull { it as? String }.orEmpty(),
         nearbyReports = (this["nearbyReports"] as? List<*>)?.mapNotNull { (it as? Number)?.toInt() }.orEmpty(),
+        selectedCategory = this["selectedCategory"] as? String ?: "Todas",
+        selectedUrgency = this["selectedUrgency"] as? String ?: "Todas",
+        source = this["source"] as? String ?: "",
+        syncType = this["syncType"] as? String ?: "",
         updatedAt = (this["updatedAt"] as? Number)?.toLong() ?: 0L
     )
 }
