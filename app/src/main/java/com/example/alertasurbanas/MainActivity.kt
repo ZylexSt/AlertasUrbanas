@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
                 var reportUrgency by rememberSaveable { mutableStateOf("Media") }
                 var reportDescription by rememberSaveable { mutableStateOf("") }
                 var reportLocationName by rememberSaveable {
-                    mutableStateOf("Av. Independencia 250, Col. Centro")
+                    mutableStateOf("")
                 }
                 var reportLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
                 var reportLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
@@ -531,7 +531,7 @@ class MainActivity : ComponentActivity() {
                                     reportType = "Bache"
                                     reportUrgency = "Media"
                                     reportDescription = ""
-                                    reportLocationName = "Av. Independencia 250, Col. Centro"
+                                    reportLocationName = ""
                                     reportLatitude = null
                                     reportLongitude = null
 
@@ -625,7 +625,7 @@ class MainActivity : ComponentActivity() {
                                     reportType = "Bache"
                                     reportUrgency = "Media"
                                     reportDescription = ""
-                                    reportLocationName = "Av. Independencia 250, Col. Centro"
+                                    reportLocationName = ""
                                     reportLatitude = null
                                     reportLongitude = null
 

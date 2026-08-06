@@ -18,7 +18,7 @@ data class UserProfile(
     val initials: String
         get() {
             val source = name.ifBlank { email }.trim()
-            if (source.isBlank()) return "AU"
+            if (source.isBlank()) return "GN"
 
             val parts = source
                 .replace("@.*".toRegex(), "")
@@ -29,7 +29,7 @@ data class UserProfile(
                 .take(2)
                 .map { it.first().uppercaseChar() }
                 .joinToString("")
-                .ifBlank { "AU" }
+                .ifBlank { "GN" }
         }
 }
 

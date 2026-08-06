@@ -47,7 +47,7 @@ fun CreateReportScreen(
     onUrgencySelected: (String) -> Unit = {},
     description: String = "",
     onDescriptionChange: (String) -> Unit = {},
-    locationName: String = "Av. Independencia 250, Col. Centro",
+    locationName: String = "",
     hasSelectedLocation: Boolean = false,
     screenTitle: String = "Crear reporte",
     screenSubtitle: String = "Ayúdanos a mantener informada a la comunidad.",

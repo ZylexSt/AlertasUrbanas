@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
 
   const brevoApiKey = Deno.env.get("BREVO_API_KEY")
   const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL")
-  const senderName = Deno.env.get("BREVO_SENDER_NAME") ?? "Alertas Urbanas"
+  const senderName = Deno.env.get("BREVO_SENDER_NAME") ?? "GeoNav"
 
   if (!brevoApiKey || !senderEmail) {
     return jsonResponse({ error: "Faltan secretos de Brevo" }, 500)
@@ -140,7 +140,7 @@ async function saveEmailLog(log: {
 function buildSubject(body: EmailRequest): string {
   if (body.status === "approved") return "Tu reporte fue validado"
   if (body.status === "rejected") return "Tu reporte fue rechazado"
-  return body.title?.trim() || "Actualizacion de Alertas Urbanas"
+  return body.title?.trim() || "Actualizacion de GeoNav"
 }
 
 function buildTextContent(body: EmailRequest): string {
@@ -159,7 +159,7 @@ function buildHtmlContent(body: EmailRequest): string {
         <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 14px; padding: 24px;">
           <h1 style="font-size: 22px; margin: 0 0 12px;">${title}</h1>
           <p style="font-size: 15px; line-height: 1.5; margin: 0;">${message}</p>
-          <p style="font-size: 12px; color: #697370; margin-top: 22px;">Alertas Urbanas</p>
+          <p style="font-size: 12px; color: #697370; margin-top: 22px;">GeoNav</p>
         </div>
       </body>
     </html>
@@ -178,7 +178,7 @@ function defaultMessage(body: EmailRequest): string {
     return `Tu reporte de ${reportType} fue rechazado. Motivo: ${reason}`
   }
 
-  return body.message?.trim() || "Tienes una nueva actualizacion en Alertas Urbanas."
+  return body.message?.trim() || "Tienes una nueva actualizacion en GeoNav."
 }
 
 function jsonResponse(payload: unknown, status: number): Response {

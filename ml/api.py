@@ -92,7 +92,7 @@ class AISummaryOut(BaseModel):
 
 
 app = FastAPI(
-    title="Alertas Urbanas IA",
+    title="GeoNav IA",
     description="API de recomendaciones urbanas generadas con Machine Learning.",
     version="1.0.0",
 )

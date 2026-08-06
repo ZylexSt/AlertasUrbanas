@@ -1,4 +1,4 @@
-# Módulo de Inteligencia Artificial - Alertas Urbanas
+# Módulo de Inteligencia Artificial - GeoNav
 
 Este módulo representa la parte de innovación tecnológica del proyecto.
 

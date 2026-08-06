@@ -87,7 +87,7 @@ private val LocationText = UrbanColors.TextPrimary
 
 @Composable
 fun SelectLocationScreen(
-    initialAddress: String = "Av. Independencia 250, Col. Centro",
+    initialAddress: String = "",
     nearbyAlerts: List<UrbanAlert> = emptyList(),
     onBack: () -> Unit = {},
     onConfirm: (String, LatLng) -> Unit = { _, _ -> }

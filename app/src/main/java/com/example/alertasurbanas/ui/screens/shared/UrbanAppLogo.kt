@@ -31,7 +31,7 @@ fun UrbanAppLogo(
     ) {
         Image(
             painter = painterResource(id = R.drawable.urban_logo),
-            contentDescription = "Logo Alertas Urbanas",
+            contentDescription = "Logo GeoNav",
             modifier = Modifier.size(size),
             contentScale = ContentScale.Fit
         )

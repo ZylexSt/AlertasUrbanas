@@ -13,7 +13,7 @@ Esta funcion envia correos transaccionales con Brevo sin exponer la API key en A
 ```powershell
 supabase login
 supabase link --project-ref TU_PROJECT_REF
-supabase secrets set BREVO_API_KEY=TU_API_KEY BREVO_SENDER_EMAIL=correo@dominio.com BREVO_SENDER_NAME="Alertas Urbanas"
+supabase secrets set BREVO_API_KEY=TU_API_KEY BREVO_SENDER_EMAIL=correo@dominio.com BREVO_SENDER_NAME="GeoNav"
 supabase functions deploy send-notification-email
 ```
 
