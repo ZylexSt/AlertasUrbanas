@@ -60,6 +60,16 @@ fun MapTilerMap(
     val currentLocationIcon = remember {
         IconFactory.getInstance(context).fromBitmap(createCurrentLocationBitmap())
     }
+    val routeStartIcon = remember {
+        IconFactory.getInstance(context).fromBitmap(
+            createRouteEndpointBitmap(label = "A", color = AndroidColor.rgb(60, 111, 98))
+        )
+    }
+    val routeEndIcon = remember {
+        IconFactory.getInstance(context).fromBitmap(
+            createRouteEndpointBitmap(label = "B", color = AndroidColor.rgb(205, 126, 70))
+        )
+    }
     val alertIconFactory = remember {
         IconFactory.getInstance(context)
     }
@@ -112,6 +122,8 @@ fun MapTilerMap(
                             riskZones = riskZones,
                             selectedRouteIndex = selectedRouteIndex,
                             currentLocationIcon = currentLocationIcon,
+                            routeStartIcon = routeStartIcon,
+                            routeEndIcon = routeEndIcon,
                             alertIconFactory = alertIconFactory,
                             context = context,
                             lastAppliedCenter = lastAppliedCenter,
@@ -150,6 +162,8 @@ fun MapTilerMap(
                         riskZones = riskZones,
                         selectedRouteIndex = selectedRouteIndex,
                         currentLocationIcon = currentLocationIcon,
+                        routeStartIcon = routeStartIcon,
+                        routeEndIcon = routeEndIcon,
                         alertIconFactory = alertIconFactory,
                         context = context,
                         lastAppliedCenter = lastAppliedCenter,
@@ -186,6 +200,8 @@ private fun syncMap(
     riskZones: List<MapRiskZone>,
     selectedRouteIndex: Int,
     currentLocationIcon: org.maplibre.android.annotations.Icon,
+    routeStartIcon: org.maplibre.android.annotations.Icon,
+    routeEndIcon: org.maplibre.android.annotations.Icon,
     alertIconFactory: IconFactory,
     context: Context,
     lastAppliedCenter: Array<LatLng?>,
@@ -241,6 +257,20 @@ private fun syncMap(
                     }
                 )
                 .width(if (isSelected) 8f else 5f)
+        )
+    }
+
+    routesToDraw.getOrNull(selectedRouteIndex)?.takeIf { it.size >= 2 }?.let { selectedRoute ->
+        map.addMarker(
+            MarkerOptions()
+                .position(selectedRoute.first())
+                .icon(routeStartIcon)
+        )
+
+        map.addMarker(
+            MarkerOptions()
+                .position(selectedRoute.last())
+                .icon(routeEndIcon)
         )
     }
 
@@ -358,12 +388,12 @@ private fun createAlertIconBitmap(context: Context, alert: UrbanAlert): Bitmap {
 
 private fun iconResourceForCategory(category: String): Int {
     return when {
+        category.contains("bloque") || category.contains("calle cerrada") || category.contains("obstru") -> R.drawable.ic_alert_block
         category.contains("bache") || category.contains("vía") || category.contains("via") || category.contains("publica") || category.contains("pública") -> R.drawable.ic_alert_construction
         category.contains("luminaria") || category.contains("ilumin") -> R.drawable.ic_alert_lightbulb
         category.contains("residuo") || category.contains("basura") -> R.drawable.ic_alert_delete
         category.contains("tránsito") || category.contains("transito") || category.contains("choque") || category.contains("veh") -> R.drawable.ic_alert_car
         category.contains("incendio") || category.contains("fuego") -> R.drawable.ic_alert_fire
-        category.contains("bloque") || category.contains("calle") -> R.drawable.ic_alert_block
         category.contains("seguridad") || category.contains("riesgo") -> R.drawable.ic_alert_shield
         else -> R.drawable.ic_alert_warning
     }
@@ -397,6 +427,42 @@ private fun createCurrentLocationBitmap(): Bitmap {
 
     paint.color = AndroidColor.rgb(66, 133, 244)
     canvas.drawCircle(size / 2f, size / 2f, 9f, paint)
+
+    return bitmap
+}
+
+private fun createRouteEndpointBitmap(label: String, color: Int): Bitmap {
+    val size = 72
+    val bitmap = Bitmap.createBitmap(size, 86, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    val centerX = size / 2f
+    val centerY = 31f
+
+    paint.style = Paint.Style.FILL
+    paint.color = AndroidColor.argb(45, 0, 0, 0)
+    canvas.drawCircle(centerX, centerY + 4f, 27f, paint)
+
+    paint.color = AndroidColor.WHITE
+    canvas.drawCircle(centerX, centerY, 28f, paint)
+
+    paint.color = color
+    canvas.drawCircle(centerX, centerY, 23f, paint)
+
+    val pinTip = android.graphics.Path().apply {
+        moveTo(centerX - 10f, centerY + 20f)
+        lineTo(centerX + 10f, centerY + 20f)
+        lineTo(centerX, 76f)
+        close()
+    }
+    canvas.drawPath(pinTip, paint)
+
+    paint.color = AndroidColor.WHITE
+    paint.textAlign = Paint.Align.CENTER
+    paint.textSize = 26f
+    paint.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    val textY = centerY - ((paint.descent() + paint.ascent()) / 2)
+    canvas.drawText(label, centerX, textY, paint)
 
     return bitmap
 }

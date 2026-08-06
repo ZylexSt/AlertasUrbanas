@@ -20,7 +20,6 @@ import com.example.alertasurbanas.ui.screens.citizen.HomeScreen
 import com.example.alertasurbanas.ui.screens.auth.LoginScreen
 import com.example.alertasurbanas.ui.screens.citizen.MapScreen
 import com.example.alertasurbanas.ui.screens.citizen.MyReportsScreen
-import com.example.alertasurbanas.ui.screens.citizen.PlanRouteScreen
 import com.example.alertasurbanas.ui.screens.citizen.ProfileScreen
 import com.example.alertasurbanas.ui.screens.auth.RegisterScreen
 import com.example.alertasurbanas.ui.screens.citizen.SelectLocationScreen
@@ -29,6 +28,7 @@ import com.example.alertasurbanas.ui.theme.AlertasUrbanasTheme
 import kotlinx.coroutines.launch
 import com.example.alertasurbanas.ui.screens.admin.AdminProfileScreen
 import com.example.alertasurbanas.data.EmailNotificationService
+import com.example.alertasurbanas.data.AIRecommendationApi
 import com.example.alertasurbanas.data.NotificationRepository
 import com.example.alertasurbanas.data.ReportRepository
 import com.example.alertasurbanas.data.UrbanAlert
@@ -81,6 +81,8 @@ class MainActivity : ComponentActivity() {
                 var locationReturnScreen by rememberSaveable { mutableStateOf("Reportar") }
                 var publicDetailBackScreen by rememberSaveable { mutableStateOf("Inicio") }
                 var notificationsBackScreen by rememberSaveable { mutableStateOf("Inicio") }
+                var mapFocusReport by remember { mutableStateOf<UrbanReport?>(null) }
+                var detailRecommendationText by rememberSaveable { mutableStateOf("") }
 
                 var errorMessage by rememberSaveable { mutableStateOf("") }
                 var isAuthLoading by rememberSaveable { mutableStateOf(false) }
@@ -102,7 +104,6 @@ class MainActivity : ComponentActivity() {
                         "EditarReporte" -> "Detalle"
                         "SeleccionarUbicacion" -> locationReturnScreen
                         "Notificaciones" -> notificationsBackScreen
-                        "PlanearRuta" -> publicDetailBackScreen
                         "IA" -> "Inicio"
                         "Mapa", "Reportar", "Alertas", "Perfil" -> "Inicio"
                         "ListaAlertas", "PanelReportes", "AdminPerfil" -> "PanelAdmin"
@@ -112,6 +113,22 @@ class MainActivity : ComponentActivity() {
 
                 BackHandler(enabled = true) {
                     handleSystemBack()
+                }
+
+                LaunchedEffect(selectedScreen, selectedReport?.id, allReports.size, myReports.size) {
+                    if (selectedScreen in listOf("Detalle", "DetalleAdmin", "DetallePublico")) {
+                        val report = selectedReport
+                        if (report == null) {
+                            detailRecommendationText = ""
+                        } else {
+                            val availableReports = (allReports + myReports)
+                                .distinctBy { it.id.ifBlank { "${it.type}-${it.locationName}-${it.createdAt}" } }
+                            detailRecommendationText = buildLocalDetailRecommendation(report, availableReports)
+                            AIRecommendationApi.getAlertRecommendation(report, availableReports)?.let { remoteText ->
+                                detailRecommendationText = remoteText
+                            }
+                        }
+                    }
                 }
 
                 when (selectedScreen) {
@@ -206,10 +223,14 @@ class MainActivity : ComponentActivity() {
 
                         MapScreen(
                             alerts = allReports.toMapAlerts(),
+                            focusAlert = mapFocusReport?.toMapAlert(),
+                            onFocusHandled = {
+                                mapFocusReport = null
+                            },
                             onNavigate = { selectedScreen = it },
                             onOpenAlert = { alert ->
-                            selectedReport = alert.toUrbanReport()
-                            publicDetailBackScreen = "Mapa"
+                                selectedReport = alert.toUrbanReport()
+                                publicDetailBackScreen = "Mapa"
                                 selectedScreen = "DetallePublico"
                             }
                         )
@@ -217,6 +238,7 @@ class MainActivity : ComponentActivity() {
 
                     "Detalle" -> DetailAlertScreen(
                         report = selectedReport,
+                        recommendationText = detailRecommendationText,
                         canEdit = selectedReport?.status == "pending" || selectedReport?.status == "rejected",
                         canDelete = selectedReport?.id?.isNotBlank() == true,
                         isDeleting = isDeleteReportLoading,
@@ -224,7 +246,8 @@ class MainActivity : ComponentActivity() {
                             selectedScreen = "Alertas"
                         },
                         onSafeRoute = {
-                            selectedScreen = "PlanearRuta"
+                            mapFocusReport = selectedReport
+                            selectedScreen = "Mapa"
                         },
                         onEditReport = {
                             val reportToEdit = selectedReport
@@ -267,6 +290,7 @@ class MainActivity : ComponentActivity() {
 
                     "DetalleAdmin" -> DetailAlertScreen(
                         report = selectedReport,
+                        recommendationText = detailRecommendationText,
                         canEdit = false,
                         canDelete = false,
                         canReview = selectedReport?.status == "pending",
@@ -276,7 +300,8 @@ class MainActivity : ComponentActivity() {
                             selectedScreen = "ListaAlertas"
                         },
                         onSafeRoute = {
-                            selectedScreen = "PlanearRuta"
+                            mapFocusReport = selectedReport
+                            selectedScreen = "Mapa"
                         },
                         onApproveReport = {
                             val reportToReview = selectedReport
@@ -374,6 +399,7 @@ class MainActivity : ComponentActivity() {
 
                     "DetallePublico" -> DetailAlertScreen(
                         report = selectedReport,
+                        recommendationText = detailRecommendationText,
                         canEdit = false,
                         canDelete = false,
                         canReview = false,
@@ -382,7 +408,8 @@ class MainActivity : ComponentActivity() {
                             selectedScreen = publicDetailBackScreen
                         },
                         onSafeRoute = {
-                            selectedScreen = "PlanearRuta"
+                            mapFocusReport = selectedReport
+                            selectedScreen = "Mapa"
                         }
                     )
 
@@ -598,15 +625,6 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    "PlanearRuta" -> PlanRouteScreen(
-                        onBack = {
-                            selectedScreen = "Detalle"
-                        },
-                        onStartRoute = {
-                            selectedScreen = "Mapa"
-                        }
-                    )
-
                     "IA" -> {
                         LaunchedEffect(Unit) {
                             try {
@@ -674,6 +692,13 @@ class MainActivity : ComponentActivity() {
                                 unreadNotificationsCount = loadedNotifications.count { !it.read }
                             } catch (_: Exception) {
                             }
+
+                            if (currentUserRole != "admin") {
+                                try {
+                                    myReports = reportRepository.getMyReports()
+                                } catch (_: Exception) {
+                                }
+                            }
                         }
 
                         if (currentUserRole == "admin") {
@@ -737,6 +762,9 @@ class MainActivity : ComponentActivity() {
                                 isSaving = isProfileSaving,
                                 message = profileMessage,
                                 unreadNotificationsCount = unreadNotificationsCount,
+                                totalReports = myReports.size,
+                                validatedReports = myReports.count { it.status == "approved" },
+                                rejectedReports = myReports.count { it.status == "rejected" },
                                 onNavigate = {
                                     if (it == "Notificaciones") {
                                         notificationsBackScreen = "Perfil"
@@ -917,6 +945,65 @@ private fun UrbanAlert.toUrbanReport(): UrbanReport {
         userName = "Reporte ciudadano",
         createdAt = System.currentTimeMillis()
     )
+}
+
+private fun UrbanReport.toMapAlert(): UrbanAlert? {
+    val lat = latitude ?: return null
+    val lng = longitude ?: return null
+
+    return UrbanAlert(
+        id = id,
+        title = type.ifBlank { "Reporte urbano" },
+        category = type.ifBlank { "Reporte" },
+        address = locationName.ifBlank { "Sin ubicación" },
+        description = description,
+        urgency = urgency.ifBlank { "Media" },
+        distanceText = "Ubicación reportada",
+        timeText = when (status) {
+            "approved" -> "Reporte validado"
+            "pending" -> "Reporte pendiente"
+            "rejected" -> "Reporte rechazado"
+            else -> "Reporte ciudadano"
+        },
+        latitude = lat,
+        longitude = lng
+    )
+}
+
+private fun buildLocalDetailRecommendation(
+    report: UrbanReport,
+    reports: List<UrbanReport>
+): String {
+    val street = report.locationName
+        .substringBefore(",")
+        .trim()
+        .ifBlank { "esta zona" }
+
+    val nearbyLowerRiskStreets = reports
+        .asSequence()
+        .filter { it.id != report.id }
+        .filter { it.status == "approved" }
+        .filter { it.locationName.isNotBlank() }
+        .filter { it.urgency != "Alta" || report.urgency == "Alta" }
+        .map { it.locationName.substringBefore(",").trim() }
+        .filter { it.isNotBlank() && !it.equals(street, ignoreCase = true) }
+        .distinct()
+        .take(2)
+        .toList()
+
+    val alternativeText = if (nearbyLowerRiskStreets.isNotEmpty()) {
+        "Calles con menor riesgo registradas para comparar: ${nearbyLowerRiskStreets.joinToString(" y ")}."
+    } else {
+        "No hay suficientes calles alternativas con bajo riesgo en los datos actuales; compara la ruta en el mapa antes de salir."
+    }
+
+    val riskText = when (report.urgency) {
+        "Alta" -> "La IA marca este punto como prioridad alta: evita pasar directamente por $street si existe una ruta cercana viable."
+        "Media" -> "La IA recomienda pasar con precaución por $street y revisar incidentes cercanos antes de iniciar el recorrido."
+        else -> "La IA detecta riesgo bajo en $street, pero conviene mantener visible el mapa por si aparecen nuevos reportes."
+    }
+
+    return "$riskText $alternativeText"
 }
 
 

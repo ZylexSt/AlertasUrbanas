@@ -21,7 +21,7 @@ data class MapSearchResult(
 )
 
 object MapSearchService {
-    private const val DEFAULT_SEARCH_RADIUS_METERS = 20_000
+    private const val DEFAULT_SEARCH_RADIUS_METERS = 0
     private const val DEFAULT_TAP_RADIUS_METERS = 120
 
     suspend fun searchFirstResult(
@@ -49,8 +49,12 @@ object MapSearchService {
 
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val locationParams = proximity?.let {
-                "&filter=circle:${it.longitude},${it.latitude},$radiusMeters" +
-                    "&bias=proximity:${it.longitude},${it.latitude}"
+                val filter = if (radiusMeters > 0) {
+                    "&filter=circle:${it.longitude},${it.latitude},$radiusMeters"
+                } else {
+                    ""
+                }
+                filter + "&bias=proximity:${it.longitude},${it.latitude}"
             } ?: ""
 
             val url = URL(

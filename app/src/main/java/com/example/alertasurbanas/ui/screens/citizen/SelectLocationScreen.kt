@@ -248,7 +248,7 @@ fun SelectLocationScreen(
             query = searchQuery,
             limit = 5,
             proximity = currentLocation ?: MapDefaults.UtcjLocation,
-            radiusMeters = 12_000
+            radiusMeters = 0
         )
     }
 

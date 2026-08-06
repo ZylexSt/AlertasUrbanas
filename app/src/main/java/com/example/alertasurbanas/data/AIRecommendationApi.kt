@@ -17,6 +17,56 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 object AIRecommendationApi {
+    suspend fun getAlertRecommendation(
+        report: UrbanReport,
+        reports: List<UrbanReport>
+    ): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val baseUrl = BuildConfig.AI_API_BASE_URL.trimEnd('/')
+            if (baseUrl.isBlank()) return@withContext null
+
+            val connection = (URL("$baseUrl/alert-recommendation").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 6_000
+                readTimeout = 8_000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Accept", "application/json")
+            }
+
+            val payload = JSONObject().apply {
+                put("selectedReport", report.toJson())
+                put(
+                    "reports",
+                    JSONArray().apply {
+                        reports.forEach { item ->
+                            put(item.toJson())
+                        }
+                    }
+                )
+            }
+
+            OutputStreamWriter(connection.outputStream, Charsets.UTF_8).use { writer ->
+                writer.write(payload.toString())
+            }
+
+            val responseCode = connection.responseCode
+            val responseText = if (responseCode in 200..299) {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }
+
+            connection.disconnect()
+
+            if (responseCode !in 200..299 || responseText.isBlank()) {
+                return@runCatching null
+            }
+
+            JSONObject(responseText).optString("recommendation").takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
     suspend fun getRecommendations(reports: List<UrbanReport>): AIRiskSummary? = withContext(Dispatchers.IO) {
         runCatching {
             val baseUrl = BuildConfig.AI_API_BASE_URL.trimEnd('/')
@@ -79,6 +129,26 @@ object AIRecommendationApi {
 
             parseSummary(JSONObject(responseText))
         }.getOrNull()
+    }
+
+    private fun UrbanReport.toJson(): JSONObject {
+        return JSONObject().apply {
+            put("id", id)
+            put("type", type)
+            put("description", description)
+            put("urgency", urgency)
+            put("locationName", locationName)
+            put("status", status)
+            put("createdAt", createdAt)
+
+            if (latitude != null) {
+                put("latitude", latitude)
+            }
+
+            if (longitude != null) {
+                put("longitude", longitude)
+            }
+        }
     }
 
     private fun parseSummary(json: JSONObject): AIRiskSummary {

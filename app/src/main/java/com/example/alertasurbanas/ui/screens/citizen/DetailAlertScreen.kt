@@ -39,6 +39,7 @@ private val DetailDanger = UrbanColors.HighUrgency
 @Composable
 fun DetailAlertScreen(
     report: UrbanReport? = null,
+    recommendationText: String = "",
     canEdit: Boolean = false,
     canDelete: Boolean = false,
     canReview: Boolean = false,
@@ -87,7 +88,7 @@ fun DetailAlertScreen(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
-                        text = "Ver ruta segura",
+                        text = "Ver en el mapa",
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -141,7 +142,11 @@ fun DetailAlertScreen(
             }
 
             item {
-                RecommendationCard()
+                RecommendationCard(
+                    text = recommendationText.ifBlank {
+                        "Consulta el mapa para ubicar esta alerta y comparar calles cercanas con menor riesgo."
+                    }
+                )
             }
 
 
@@ -270,13 +275,6 @@ private fun DetailHeader(
             }
         }
 
-        IconButton(onClick = {}) {
-            Icon(
-                imageVector = Icons.Outlined.Share,
-                contentDescription = "Compartir",
-                tint = DetailText
-            )
-        }
     }
 }
 
@@ -463,7 +461,7 @@ private fun RejectionReasonCard(reason: String) {
 }
 
 @Composable
-private fun RecommendationCard() {
+private fun RecommendationCard(text: String) {
     Card(
         shape = RoundedCornerShape(17.dp),
         colors = CardDefaults.cardColors(
@@ -497,9 +495,10 @@ private fun RecommendationCard() {
                 )
 
                 Text(
-                    text = "Utiliza una ruta alternativa para evitar esta zona.",
+                    text = text,
                     color = DetailText.copy(alpha = 0.72f),
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp
                 )
             }
         }

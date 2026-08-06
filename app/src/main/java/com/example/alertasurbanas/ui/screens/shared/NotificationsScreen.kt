@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -162,18 +163,29 @@ private fun NotificationCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (notification.read) Color.White else color.copy(alpha = 0.08f)
+            containerColor = Color.White
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (notification.read) 1.dp else 3.dp)
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.Top
         ) {
+            if (!notification.read) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(52.dp)
+                        .background(color, RoundedCornerShape(100.dp))
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(color.copy(alpha = 0.13f), CircleShape),
+                    .background(color.copy(alpha = if (notification.read) 0.10f else 0.16f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -199,10 +211,16 @@ private fun NotificationCard(
 
                     if (!notification.read) {
                         Surface(
-                            shape = CircleShape,
-                            color = color
+                            shape = RoundedCornerShape(100.dp),
+                            color = color.copy(alpha = 0.12f)
                         ) {
-                            Spacer(modifier = Modifier.size(8.dp))
+                            Text(
+                                text = "Nuevo",
+                                color = color,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
                         }
                     }
                 }
@@ -231,7 +249,7 @@ private fun NotificationCard(
                         onClick = onMarkAsRead,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = NotificationsPrimary)
                     ) {
-                        Text(text = "Marcar como leida", fontSize = 12.sp)
+                        Text(text = "Marcar como leída", fontSize = 12.sp)
                     }
                 }
             }

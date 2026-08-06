@@ -46,6 +46,16 @@ class AIRequest(BaseModel):
     reports: list[ReportIn] = []
 
 
+class AlertRecommendationRequest(BaseModel):
+    selectedReport: ReportIn
+    reports: list[ReportIn] = []
+
+
+class AlertRecommendationOut(BaseModel):
+    recommendation: str
+    alternatives: list[str]
+
+
 class AIRecommendationOut(BaseModel):
     title: str
     description: str
@@ -116,6 +126,13 @@ def normalize_type(value: str) -> str:
     if not value:
         return "Vía pública"
     return value
+
+
+def street_name(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return "esta zona"
+    return value.split(",")[0].strip() or "esta zona"
 
 
 def normalize_urgency(value: str) -> str:
@@ -366,4 +383,67 @@ def recommendations(request: AIRequest):
             reverse=True,
         ),
         recommendations=recommendations_out,
+    )
+
+
+@app.post("/alert-recommendation", response_model=AlertRecommendationOut)
+def alert_recommendation(request: AlertRecommendationRequest):
+    selected = request.selectedReport
+    valid_reports = [
+        report
+        for report in request.reports
+        if report.status.lower() == "approved" and report.id != selected.id
+    ]
+
+    model = load_model()
+    selected_label = predict_report_risk(model, selected, valid_reports + [selected])
+    selected_street = street_name(selected.locationName)
+
+    nearby_reports = sorted(
+        [
+            report
+            for report in valid_reports
+            if report.latitude is not None
+            and report.longitude is not None
+            and selected.latitude is not None
+            and selected.longitude is not None
+        ],
+        key=lambda report: haversine_meters(
+            selected.latitude or 0,
+            selected.longitude or 0,
+            report.latitude or 0,
+            report.longitude or 0,
+        ),
+    )
+
+    alternatives = []
+    for report in nearby_reports:
+        candidate = street_name(report.locationName)
+        if not candidate or candidate.lower() == selected_street.lower():
+            continue
+        if report.urgency.lower() == "alta" and selected.urgency.lower() != "alta":
+            continue
+        if candidate not in alternatives:
+            alternatives.append(candidate)
+        if len(alternatives) >= 3:
+            break
+
+    if selected_label == "Riesgo alto" or selected.urgency.lower() == "alta":
+        base = f"La red neuronal detecta riesgo alto en {selected_street or 'esta zona'}."
+        action = "Evita cruzar directamente por ese punto y compara una ruta cercana antes de iniciar el recorrido."
+    elif selected_label == "Riesgo medio" or selected.urgency.lower() == "media":
+        base = f"La red neuronal detecta riesgo moderado en {selected_street or 'esta zona'}."
+        action = "Puedes pasar con precaución, pero revisa si hay una calle paralela con menos reportes."
+    else:
+        base = f"La red neuronal detecta riesgo bajo en {selected_street or 'esta zona'}."
+        action = "Mantén el mapa activo por si aparecen reportes nuevos durante el recorrido."
+
+    if alternatives:
+        alternative_text = "Calles cercanas para comparar: " + ", ".join(alternatives) + "."
+    else:
+        alternative_text = "No hay suficientes calles alternativas con menor riesgo en los reportes actuales."
+
+    return AlertRecommendationOut(
+        recommendation=f"{base} {action} {alternative_text}",
+        alternatives=alternatives,
     )

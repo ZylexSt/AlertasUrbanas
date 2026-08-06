@@ -49,6 +49,9 @@ fun ProfileScreen(
     isSaving: Boolean = false,
     message: String = "",
     unreadNotificationsCount: Int = 0,
+    totalReports: Int = 0,
+    validatedReports: Int = 0,
+    rejectedReports: Int = 0,
     onNavigate: (String) -> Unit = {},
     onUpdateProfile: (name: String, email: String, currentPassword: String) -> Unit = { _, _, _ -> },
     onChangePassword: (currentPassword: String, newPassword: String) -> Unit = { _, _ -> },
@@ -105,7 +108,11 @@ fun ProfileScreen(
             }
 
             item {
-                ProfileStatistics()
+                ProfileStatistics(
+                    totalReports = totalReports,
+                    validatedReports = validatedReports,
+                    rejectedReports = rejectedReports
+                )
             }
 
             item {
@@ -289,26 +296,30 @@ private fun UserProfileCard(
 }
 
 @Composable
-private fun ProfileStatistics() {
+private fun ProfileStatistics(
+    totalReports: Int,
+    validatedReports: Int,
+    rejectedReports: Int
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         ProfileStatistic(
-            value = "3",
+            value = totalReports.toString(),
             label = "Reportes",
             modifier = Modifier.weight(1f)
         )
 
         ProfileStatistic(
-            value = "1",
-            label = "Validado",
+            value = validatedReports.toString(),
+            label = "Validados",
             modifier = Modifier.weight(1f)
         )
 
         ProfileStatistic(
-            value = "5",
-            label = "Guardados",
+            value = rejectedReports.toString(),
+            label = "Rechazados",
             modifier = Modifier.weight(1f)
         )
     }

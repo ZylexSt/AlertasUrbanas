@@ -109,6 +109,8 @@ private val MapLow = UrbanColors.Primary
 @Composable
 fun MapScreen(
     alerts: List<UrbanAlert> = emptyList(),
+    focusAlert: UrbanAlert? = null,
+    onFocusHandled: () -> Unit = {},
     onNavigate: (String) -> Unit = {},
     onOpenAlert: (UrbanAlert) -> Unit = {}
 ) {
@@ -142,7 +144,16 @@ fun MapScreen(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val distanceOrigin = currentLocation ?: mapCenter
-    val allAlerts = (if (alerts.isNotEmpty()) alerts else AlertRepository.publicAlerts)
+    val baseAlerts = if (alerts.isNotEmpty()) alerts else AlertRepository.publicAlerts
+    val alertsWithFocus = focusAlert?.let { target ->
+        if (baseAlerts.any { it.id == target.id }) {
+            baseAlerts
+        } else {
+            baseAlerts + target
+        }
+    } ?: baseAlerts
+
+    val allAlerts = alertsWithFocus
         .map { alert ->
             alert.copy(
                 distanceText = formatDistance(
@@ -248,7 +259,7 @@ fun MapScreen(
                     query = searchQuery,
                     limit = 1,
                     proximity = currentLocation ?: MapDefaults.UtcjLocation,
-                    radiusMeters = 20_000,
+                    radiusMeters = 0,
                     showDistance = currentLocation != null
                 ).firstOrNull()
                 if (result != null) {
@@ -276,11 +287,19 @@ fun MapScreen(
 
         scope.launch {
             isRouteLoading = true
-            val results = MapRouteService.drivingRoutes(origin, destination, targetCount = 3)
+            val evaluatedRoutes = MapRouteService.drivingRoutes(origin, destination, targetCount = 3)
                 .map { route ->
-                    route.withNearbyReports(countReportsNearRoute(route.points, filteredAlerts))
+                    route.withRouteReports(
+                        nearbyCount = countReportsNearRoute(route.points, filteredAlerts),
+                        blockedCount = countBlockedStreetReportsNearRoute(route.points, filteredAlerts)
+                    )
                 }
-                .sortedWith(compareBy<MapRouteResult> { it.durationMinutes }.thenBy { it.distanceKm })
+                .sortedBy { it.distanceKm }
+
+            val results = evaluatedRoutes
+                .filter { it.blockedReports == 0 }
+                .sortedBy { it.distanceKm }
+
             isRouteLoading = false
 
             if (results.isNotEmpty()) {
@@ -308,6 +327,16 @@ fun MapScreen(
                     ).show()
                 }
                 Toast.makeText(context, "Se encontraron ${results.size} ruta(s).", Toast.LENGTH_SHORT).show()
+            } else if (evaluatedRoutes.isNotEmpty()) {
+                routePoints = emptyList()
+                routeResult = null
+                routeResults = emptyList()
+                selectedRouteIndex = 0
+                Toast.makeText(
+                    context,
+                    "No hay una ruta disponible sin pasar por una calle bloqueada.",
+                    Toast.LENGTH_LONG
+                ).show()
             } else {
                 Toast.makeText(
                     context,
@@ -331,7 +360,7 @@ fun MapScreen(
                 limit = 5,
                 proximity = currentLocation ?: MapDefaults.UtcjLocation,
                 showDistance = currentLocation != null,
-                radiusMeters = 12_000
+                radiusMeters = 0
             )
         } catch (_: Exception) {
             emptyList()
@@ -351,7 +380,7 @@ fun MapScreen(
                 limit = 4,
                 proximity = currentLocation ?: MapDefaults.UtcjLocation,
                 showDistance = currentLocation != null,
-                radiusMeters = 20_000
+                radiusMeters = 0
             )
         } catch (_: Exception) {
             emptyList()
@@ -362,6 +391,26 @@ fun MapScreen(
         if (selectedAlert != null && filteredAlerts.none { it.id == selectedAlert?.id }) {
             selectedAlert = null
         }
+    }
+
+    LaunchedEffect(focusAlert?.id) {
+        val target = focusAlert ?: return@LaunchedEffect
+        val coordinate = LatLng(target.latitude, target.longitude)
+
+        selectedAlert = target
+        selectedPlace = null
+        showSelectedPlaceCard = false
+        searchSuggestions = emptyList()
+        isSearchActive = false
+        routePoints = emptyList()
+        routeResult = null
+        routeResults = emptyList()
+        selectedRouteIndex = 0
+        routeDestinationCoordinate = null
+        routeDestinationName = ""
+        mapCenter = coordinate
+        mapZoom = 16.0
+        onFocusHandled()
     }
 
     Scaffold(
@@ -403,6 +452,9 @@ fun MapScreen(
                 },
                 onMapClick = { coordinate ->
                     selectPlaceFromMapTap(coordinate)
+                },
+                onCameraIdle = { coordinate ->
+                    mapCenter = coordinate
                 }
             )
 
@@ -1292,8 +1344,12 @@ private fun RouteOptionRow(
                 )
 
                 Text(
-                    text = "${route.nearbyReports} reporte(s) cerca de esta ruta",
-                    color = if (route.nearbyReports == 0) MapPrimary else MapHigh,
+                    text = routeSafetyText(route),
+                    color = when {
+                        route.blockedReports > 0 -> MapHigh
+                        route.nearbyReports == 0 -> MapPrimary
+                        else -> MapMedium
+                    },
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1369,8 +1425,12 @@ private fun ActiveRouteSummaryCard(
                 )
 
                 Text(
-                    text = "${route.nearbyReports} alerta(s)",
-                    color = if (route.nearbyReports == 0) MapPrimary else MapHigh,
+                    text = routeSafetyText(route),
+                    color = when {
+                        route.blockedReports > 0 -> MapHigh
+                        route.nearbyReports == 0 -> MapPrimary
+                        else -> MapMedium
+                    },
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -1511,6 +1571,14 @@ private fun colorForUrgency(urgency: String): Color {
     }
 }
 
+private fun routeSafetyText(route: MapRouteResult): String {
+    return when {
+        route.blockedReports > 0 -> "${route.blockedReports} calle(s) bloqueada(s) · no recomendable"
+        route.nearbyReports == 0 -> "Sin alertas cercanas · ruta libre"
+        else -> "${route.nearbyReports} alerta(s) cerca · sin calles bloqueadas"
+    }
+}
+
 private fun countReportsNearRoute(
     routePoints: List<LatLng>,
     alerts: List<UrbanAlert>,
@@ -1528,6 +1596,36 @@ private fun countReportsNearRoute(
             ) <= thresholdMeters
         }
     }
+}
+
+private fun countBlockedStreetReportsNearRoute(
+    routePoints: List<LatLng>,
+    alerts: List<UrbanAlert>,
+    thresholdMeters: Double = 90.0
+): Int {
+    if (routePoints.size < 2) return 0
+
+    return alerts.count { alert ->
+        if (!isBlockedStreetAlert(alert)) return@count false
+
+        val alertPoint = LatLng(alert.latitude, alert.longitude)
+        routePoints.windowed(2).any { segment ->
+            distancePointToSegmentMeters(
+                point = alertPoint,
+                segmentStart = segment[0],
+                segmentEnd = segment[1]
+            ) <= thresholdMeters
+        }
+    }
+}
+
+private fun isBlockedStreetAlert(alert: UrbanAlert): Boolean {
+    val text = "${alert.title} ${alert.category} ${alert.description}".lowercase()
+    return text.contains("calle bloqueada") ||
+        text.contains("calle cerrada") ||
+        text.contains("bloquead") ||
+        text.contains("cerrad") ||
+        text.contains("obstruid")
 }
 
 private fun distancePointToSegmentMeters(

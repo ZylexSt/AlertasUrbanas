@@ -14,13 +14,21 @@ data class MapRouteResult(
     val points: List<LatLng>,
     val distanceKm: Double,
     val durationMinutes: Int,
-    val nearbyReports: Int = 0
+    val nearbyReports: Int = 0,
+    val blockedReports: Int = 0
 ) {
     val summaryText: String
         get() = "${durationMinutes} min · ${String.format("%.1f", distanceKm)} km"
 
     fun withNearbyReports(count: Int): MapRouteResult {
         return copy(nearbyReports = count)
+    }
+
+    fun withRouteReports(nearbyCount: Int, blockedCount: Int): MapRouteResult {
+        return copy(
+            nearbyReports = nearbyCount,
+            blockedReports = blockedCount
+        )
     }
 }
 
@@ -38,10 +46,14 @@ object MapRouteService {
         targetCount: Int = 3
     ): List<MapRouteResult> = withContext(Dispatchers.IO) {
         val routes = mutableListOf<MapRouteResult>()
-        routes += routesWithOpenRouteService(origin, destination, targetCount)
+        routeWithGeoapify(origin, destination)?.let { routes += it }
 
         if (routes.size < targetCount) {
-            routeWithGeoapify(origin, destination)?.let { routes += it }
+            routes += geoapifyAlternativeRoutes(origin, destination, targetCount - routes.size)
+        }
+
+        if (routes.size < targetCount) {
+            routes += routesWithOpenRouteService(origin, destination, targetCount - routes.size)
         }
 
         if (routes.size < targetCount) {
@@ -51,7 +63,7 @@ object MapRouteService {
         routes
             .filter { it.points.size >= 2 }
             .distinctBy { routeSignature(it) }
-            .sortedWith(compareBy<MapRouteResult> { it.durationMinutes }.thenBy { it.distanceKm })
+            .sortedBy { it.distanceKm }
             .take(targetCount)
     }
 
@@ -87,6 +99,7 @@ object MapRouteService {
                     [${origin.longitude}, ${origin.latitude}],
                     [${destination.longitude}, ${destination.latitude}]
                   ],
+                  "preference": "shortest",
                   "alternative_routes": {
                     "target_count": $targetCount,
                     "share_factor": 0.6,
@@ -137,7 +150,7 @@ object MapRouteService {
 
             routes
                 .filter { it.points.size >= 2 }
-                .sortedWith(compareBy<MapRouteResult> { it.durationMinutes }.thenBy { it.distanceKm })
+                .sortedBy { it.distanceKm }
         } catch (_: Exception) {
             emptyList()
         }
@@ -161,6 +174,7 @@ object MapRouteService {
                 "https://api.geoapify.com/v1/routing" +
                     "?waypoints=$waypoints" +
                     "&mode=drive" +
+                    "&type=short" +
                     "&apiKey=${BuildConfig.GEOAPIFY_API_KEY}"
             )
 

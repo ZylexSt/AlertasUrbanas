@@ -61,10 +61,6 @@ fun AIRecommendationsScreen(
     reports: List<UrbanReport> = emptyList(),
     alerts: List<UrbanAlert> = AlertRepository.publicAlerts
 ) {
-    var selectedPeriod by rememberSaveable {
-        mutableStateOf("Ahora")
-    }
-
     val liveAlerts = remember(reports, alerts) {
         if (reports.isNotEmpty()) reports.toAIAlerts() else alerts
     }
@@ -77,7 +73,7 @@ fun AIRecommendationsScreen(
         mutableStateOf(false)
     }
 
-    var riskSummary by remember(liveAlerts, selectedPeriod) {
+    var riskSummary by remember(liveAlerts) {
         mutableStateOf(AIRecommendationEngine.analyze(liveAlerts))
     }
 
@@ -94,7 +90,7 @@ fun AIRecommendationsScreen(
         mutableStateOf<List<SaferStreetSuggestion>>(emptyList())
     }
 
-    LaunchedEffect(reports, selectedPeriod) {
+    LaunchedEffect(reports) {
         if (reports.isEmpty()) {
             riskSummary = AIRecommendationEngine.analyze(liveAlerts)
             isUsingRemoteAI = false
@@ -158,28 +154,6 @@ fun AIRecommendationsScreen(
                         else -> "${riskSummary.description} · modo local"
                     }
                 )
-            }
-
-            item {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(9.dp)
-                ) {
-                    listOf("Ahora", "Hoy", "Esta semana").forEach {
-                        FilterChip(
-                            selected = selectedPeriod == it,
-                            onClick = {
-                                selectedPeriod = it
-                            },
-                            label = {
-                                Text(it)
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = AIPrimary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
-                }
             }
 
             item {
