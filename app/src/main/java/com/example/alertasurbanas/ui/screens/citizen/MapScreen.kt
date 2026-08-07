@@ -911,7 +911,7 @@ private fun MapSearchPanel(
 }
 
 @Composable
-private fun SearchInputBox(
+private fun  SearchInputBox(
     value: String,
     onValueChange: (String) -> Unit,
     onSearch: () -> Unit,

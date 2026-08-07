@@ -90,7 +90,7 @@ fun DetailAlertScreen(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
-                        text = "Ver en el mapa",
+                        text = "Ir al mapa",
                         fontWeight = FontWeight.Bold
                     )
                 }
